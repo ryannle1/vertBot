@@ -1,0 +1,40 @@
+import yfinance as yf
+import pytz
+import datetime
+
+
+
+
+def is_market_open():
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.datetime.now(eastern)
+    # Market hours: 9:30am to 4:00pm Eastern, Mon-Fri
+    return (now.weekday() < 5 and
+            ((now.hour > 9 or (now.hour == 9 and now.minute >= 30)) and
+             (now.hour < 16)))
+
+
+
+def fetch_closing_price(symbol):
+    """Fetch previous market closing price and date for a symbol."""
+    ticker = yf.Ticker(symbol)
+    hist = ticker.history(period="2d")  # Get last 2 days (in case of market holiday)
+    if hist.empty or len(hist) < 2:
+        raise ValueError("Not enough price data found.")
+    last_close = hist['Close'].iloc[-2]
+    last_date = hist.index[-2].strftime('%Y-%m-%d')
+    return float(last_close), last_date
+
+
+def fetch_current_price(symbol):
+    """
+    Fetch the current (live) market price for a stock symbol using yfinance.
+    If the market is closed, returns the last available price.
+    """
+    ticker = yf.Ticker(symbol)
+    hist = ticker.history(period="2d")  # Get last 2 days (in case of market holiday)
+    if hist.empty:
+        raise ValueError("No price data found.")
+    last_close = hist['Close'].iloc[-1]
+    last_date = hist.index[-1].strftime('%Y-%m-%d')
+    return float(last_close), last_date

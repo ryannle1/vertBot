@@ -1,0 +1,81 @@
+# Ignore Python files
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+
+# Ignore virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Ignore logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Ignore build/output folders
+build/
+dist/
+*.egg-info/
+
+# Ignore node modules (if using Node.js)
+node_modules/
+
+# Ignore environment variable files
+.env
+config/secrets.env
+
+
+# Ignore OneDrive sync files
+*.tmp
+~$*
+
+# Ignore compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.out
+*.obj
+
+# Ignore test coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore backup files
+*~
+*.bak
+*.swp
+*.swo
+
+# Ignore configuration files
+*.cfg
+*.ini
+
+# Ignore Ollama cache
+.ollama/
+
+
+# Ignore Docker images and containers
+*.tar
+*.img
+docker-compose.override.yml
+
+
