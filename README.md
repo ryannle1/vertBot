@@ -78,7 +78,8 @@ vertBot/
 ├── requirements.txt    # Python dependencies
 └── README.md
 
-
+```
+---
 
 ## How to Use
 
@@ -90,8 +91,8 @@ vertBot/
     - Add your required API keys (e.g., for market data and news providers).  
     - Example:
       ```env
-      ALPHA_VANTAGE_API_KEY=your_api_key_here
-      NEWS_API_KEY=your_news_api_key_here
+      FINNHUB_API_KEY=your_api_key_here
+      DISORD_TOKEN=your_discord_token_here
       ```
 
 3. **Run the Bot:**  
@@ -142,3 +143,16 @@ VertBot is designed for ongoing growth and adaptability. Planned enhancements in
     Actively gather user suggestions to prioritize new features and data types.
 
 Contributions and feature requests are welcome—help shape VertBot’s future!
+
+---
+
+## Acknowledgements
+
+VertBot leverages the following open-source tools and APIs:
+
+- [discord.py](https://github.com/Rapptz/discord.py) — Python library for building Discord bots.
+- [Finnhub](https://finnhub.io/) — Real-time stock market data and news API.
+- [Ollama](https://ollama.com/) — Local LLM orchestration for AI-powered features.
+- [DeepSeek LLM](https://github.com/deepseek-ai/DeepSeek-LLM) — Large Language Model for financial analysis and summaries.
+
+Special thanks to the open-source community for their invaluable libraries and resources.
