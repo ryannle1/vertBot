@@ -12,14 +12,14 @@ def fetch_news(symbol):
     eastern = pytz.timezone('US/Eastern')
     # Get the current date in Eastern timezone
     now_eastern = datetime.now(eastern)
-    two_days_ago = now_eastern - timedelta(days=2)
+    days_ago = now_eastern - timedelta(days=4)
 
     market_open = eastern.localize(datetime.combine(now_eastern.date(), time(9, 30)))
 
     url = f'https://finnhub.io/api/v1/company-news'
     params = {
         'symbol': symbol,
-        'from': two_days_ago.strftime('%Y-%m-%d'),
+        'from': days_ago.strftime('%Y-%m-%d'),
         'to': now_eastern.strftime('%Y-%m-%d'),
         'token': FINNHUB_API_KEY
     }

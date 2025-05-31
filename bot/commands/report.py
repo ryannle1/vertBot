@@ -83,16 +83,16 @@ async def report(ctx):
             continue
 
         # Send news
-        # try:
-        #     articles = fetch_news(symbol)
-        #     if articles:
-        #         news_lines = [f"- [{art['title']}]({art['url']})" for art in articles[:5]]
-        #         news_message = f"Latest news for {symbol.upper()}:\n" + "\n".join(news_lines)
-        #     else:
-        #         news_message = f"No recent news found for {symbol.upper()}."
-        #     await ctx.send(news_message)
-        # except Exception as e:
-        #     await ctx.send(f"⚠️ Could not fetch news for {symbol.upper()}. Error: {e}")
+        try:
+            articles = fetch_news(symbol)
+            if articles:
+                news_lines = [f"- [{art['title']}]({art['url']})" for art in articles[:5]]
+                news_message = f"Latest news for {symbol.upper()}:\n" + "\n".join(news_lines)
+            else:
+                news_message = f"No recent news found for {symbol.upper()}."
+            await ctx.send(news_message)
+        except Exception as e:
+            await ctx.send(f"⚠️ Could not fetch news for {symbol.upper()}. Error: {e}")
 
         await ctx.channel.typing()
         await ctx.bot.loop.run_in_executor(None, lambda: None)  # Small async pause to avoid rate limits
