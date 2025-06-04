@@ -27,3 +27,15 @@ def fetch_news(symbol):
     r.raise_for_status()
     data = r.json()
     return data[:5]  # Return top 5 news items
+
+
+def fetch_general_market_news():
+    url = "https://finnhub.io/api/v1/news"
+    params = {
+        "category": "general",
+        "token": FINNHUB_API_KEY
+    }
+    r = requests.get(url, params=params)
+    r.raise_for_status()
+    data = r.json()
+    return data[:15]  # Return top 15 general market news items

@@ -1,9 +1,14 @@
 from discord.ext import commands
 from ai.deepseek_llm import query_deepseek
-from api.news_data import fetch_news  # Adjust path as needed
+from api.news_data import fetch_news, fetch_general_market_news  # Adjust path as needed
 import re
 import csv
 import re
+from collections import defaultdict, deque
+
+# Memory for each channel: channel_id -> deque of (role, message) tuples
+chat_memory = defaultdict(lambda: deque(maxlen=10))  # keep last 10 exchanges per channel
+
 
 
 def remove_chain_of_thought(text):
@@ -53,13 +58,24 @@ async def ask_ai(ctx, *, question: str):
         await ctx.message.delete()
     except Exception:
         pass
+    channel_id = ctx.channel.id
+
+    # Add user's message to history
+    chat_memory[channel_id].append(("user", question))
+
+    # Build prompt with history
+    history_lines = []
+    for role, msg in chat_memory[channel_id]:
+        if role == "user":
+            history_lines.append(f"User: {msg}")
+        else:
+            history_lines.append(f"Bot: {msg}")
+
+    # Combine history with the current question
 
     tickers = extract_tickers_from_message(question)
-    if not tickers:
-        await ctx.send("No tickers detected. Please use the `$TICKER` format (e.g., `$AAPL`).")
-        return
-    news_blocks = []
     if tickers:
+        news_blocks = []
         for ticker in tickers:
             news_items = fetch_news(ticker)
             if news_items:
@@ -71,16 +87,20 @@ async def ask_ai(ctx, *, question: str):
                 news_blocks.append(f"{ticker}: No recent news found.")
         news_prompt = "\n\n".join(news_blocks)
         prompt = (
-            "IMPORTANT: Do NOT include any explanation, preamble, thinking steps, or chain-of-thought."
-            " Only output the final summary or analysis below, starting with the summary for each ticker."
-            "\n\n"
-            f"{news_prompt}"
+            f"{news_prompt}\n"
+            "You are a helpful financial assistant. Below is the recent conversation:\n"
+            f"{chr(10).join(history_lines)}\n"
+            "Continue the conversation and answer the last question, using only the provided news headlines, and giving a concise, investor-focused summary. Do NOT include any chain-of-thought or step-by-step thinking.\n"
         )
     else:
+        # No tickers detected: just answer the question directly
+        news_items = fetch_general_market_news()
+        news_headlines = "\n".join(f"- {item.get('headline', '[No headline]')}" for item in news_items)
         prompt = (
-            "Answer the user's question as an investor-focused summary or analysis. "
-            "Do NOT show your reasoning or chain-of-thought, just the answer.\n"
-            f"{question}"
+            f"{news_headlines}\n"
+            "You are a helpful financial assistant. Below is the recent conversation:\n"
+            f"{chr(10).join(history_lines)}\n"
+            "Continue the conversation and answer the last question in a concise, investor-focused way.\n"
         )
 
     await ctx.send("💬 Thinking with DeepSeek...")

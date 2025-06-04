@@ -177,10 +177,12 @@ from bot.commands.news import get_news
 from bot.commands.report import set_report_channel
 from bot.commands.report import report
 from bot.commands.ai import ask_ai
+from bot.commands.news import get_general_news
 
 
 
 # Register commands
+bot.add_command(get_general_news)
 bot.add_command(ask_ai)
 bot.add_command(report)
 bot.add_command(get_price)
