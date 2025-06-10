@@ -1,5 +1,0 @@
-discord.py
-yfinance
-requests
-python-dotenv
-apscheduler

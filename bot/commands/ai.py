@@ -5,6 +5,8 @@ import re
 import csv
 import re
 from collections import defaultdict, deque
+from api.market_data import fetch_current_price  # Adjust path as needed
+from bot.commands.chart import get_stock_chart  # Adjust path as needed
 
 # Memory for each channel: channel_id -> deque of (role, message) tuples
 chat_memory = defaultdict(lambda: deque(maxlen=10))  # keep last 10 exchanges per channel
@@ -71,26 +73,43 @@ async def ask_ai(ctx, *, question: str):
         else:
             history_lines.append(f"Bot: {msg}")
 
-    # Combine history with the current question
-
     tickers = extract_tickers_from_message(question)
+    chart_mentions = []
     if tickers:
         news_blocks = []
         for ticker in tickers:
+            # Fetch current price
+            try:
+                price, date = fetch_current_price(ticker)
+                price_line = f"Current price for {ticker}: ${price:.2f} (as of {date})"
+            except Exception:
+                price_line = f"Current price for {ticker}: unavailable"
+
+            # Fetch news
             news_items = fetch_news(ticker)
             if news_items:
                 news_headlines = "\n".join(
                     f"- {item.get('headline', '[No headline]')}" for item in news_items
                 )
-                news_blocks.append(f"{ticker}:\n{news_headlines}")
+                news_blocks.append(f"{ticker}:\n{price_line}\n{news_headlines}")
             else:
-                news_blocks.append(f"{ticker}: No recent news found.")
+                news_blocks.append(f"{ticker}:\n{price_line}\nNo recent news found.")
+
+            # Automatically generate and send chart for each ticker
+            try:
+                await get_stock_chart(ctx, ticker)
+                chart_mentions.append(f"A price chart for {ticker} is attached above.")
+            except Exception as e:
+                chart_mentions.append(f"Could not generate chart for {ticker}: {e}")
+
         news_prompt = "\n\n".join(news_blocks)
+        chart_prompt = "\n".join(chart_mentions)
         prompt = (
             f"{news_prompt}\n"
+            f"{chart_prompt}\n"
             "You are a helpful financial assistant. Below is the recent conversation:\n"
             f"{chr(10).join(history_lines)}\n"
-            "Continue the conversation and answer the last question, using only the provided news headlines, and giving a concise, investor-focused summary. Do NOT include any chain-of-thought or step-by-step thinking.\n"
+            "Continue the conversation and answer the last question, using the provided current prices, news headlines, and the attached price charts for each ticker. Do NOT include any chain-of-thought or step-by-step thinking.\n"
         )
     else:
         # No tickers detected: just answer the question directly
@@ -104,6 +123,7 @@ async def ask_ai(ctx, *, question: str):
         )
 
     await ctx.send("💬 Thinking with DeepSeek...")
+    await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
 
     try:
         response = query_deepseek(prompt)
@@ -116,3 +136,4 @@ async def ask_ai(ctx, *, question: str):
             await ctx.send("🤔 I didn't get a response from DeepSeek.")
     except Exception as e:
         await ctx.send(f"❌ LLM error: {e}")
+    await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")

@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from api.market_data import fetch_closing_price, fetch_current_price
 from api.news_data import fetch_news
 from config.constants import STOCK_SYMBOLS
+import asyncio
 
 CHANNELS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'channels.json')
 
@@ -78,21 +79,25 @@ async def report(ctx):
                 f"━━━━━━━━━━━━━━━━━━━━━━"
             )
             await ctx.send(message)
+            await asyncio.sleep(2)
         except Exception as e:
             await ctx.send(f"⚠️ Could not fetch price for {symbol.upper()}. Error: {e}")
+            await asyncio.sleep(2)
             continue
 
         # Send news
         try:
             articles = fetch_news(symbol)
             if articles:
-                news_lines = [f"- [{art['title']}]({art['url']})" for art in articles[:5]]
+                news_lines = [f"- [{art['headline']}]({art['url']})" for art in articles[:5]]
                 news_message = f"Latest news for {symbol.upper()}:\n" + "\n".join(news_lines)
             else:
                 news_message = f"No recent news found for {symbol.upper()}."
             await ctx.send(news_message)
+            await asyncio.sleep(2)
         except Exception as e:
             await ctx.send(f"⚠️ Could not fetch news for {symbol.upper()}. Error: {e}")
+            await asyncio.sleep(2)
 
         await ctx.channel.typing()
         await ctx.bot.loop.run_in_executor(None, lambda: None)  # Small async pause to avoid rate limits
