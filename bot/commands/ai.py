@@ -22,8 +22,8 @@ def remove_chain_of_thought(text):
         return text[idx + len(marker):].lstrip()
     # Fallback: try to find first ticker or bullet
     # For example, look for 'NVDA:' or a dash/bullet
-    ticker_match = re.search(r"\b[A-Z]{2,5}:\b", text)
-    bullet_match = re.search(r"^-", text, re.MULTILINE)
+    ticker_match = re.search(r"\b[A-Z]{2,5}:\b", text)          # Match tickers like NVDA:
+    bullet_match = re.search(r"^-", text, re.MULTILINE)         # Match bullet points starting with a dash
     if ticker_match:
         return text[ticker_match.start():]
     elif bullet_match:
@@ -31,6 +31,7 @@ def remove_chain_of_thought(text):
     return text  # No marker found, return as-is
 
 
+# Load valid tickers from CSV file
 def load_valid_tickers(csv_path="data/tickers.csv"):
     tickers = set()
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
@@ -40,8 +41,11 @@ def load_valid_tickers(csv_path="data/tickers.csv"):
             tickers.add(ticker)
     return tickers
 
+# Load valid tickers at startup
 VALID_TICKERS = load_valid_tickers()
 
+
+# Extract tickers from a message
 def extract_tickers_from_message(msg):
     # Find all words starting with $, followed by 1–5 alphanumeric chars (case-insensitive)
     pattern = r'\$([a-zA-Z]{1,5}\d{0,3}(?:\.[A-Za-z])?)'
@@ -54,6 +58,7 @@ def extract_tickers_from_message(msg):
     return list(tickers)
 
 
+# Command to ask the AI
 @commands.command(name="ask")
 async def ask_ai(ctx, *, question: str):
     try:
@@ -69,31 +74,31 @@ async def ask_ai(ctx, *, question: str):
     history_lines = []
     for role, msg in chat_memory[channel_id]:
         if role == "user":
-            history_lines.append(f"User: {msg}")
+            history_lines.append(f"User: {msg}")            # Add user messages
         else:
-            history_lines.append(f"Bot: {msg}")
+            history_lines.append(f"Bot: {msg}")             # Add bot messages        
 
-    tickers = extract_tickers_from_message(question)
-    chart_mentions = []
+    tickers = extract_tickers_from_message(question)        # Extract tickers from the question
+    chart_mentions = []                             # To store chart mentions for each ticker
     if tickers:
-        news_blocks = []
+        news_blocks = []                            # To store news blocks for each ticker
         for ticker in tickers:
             # Fetch current price
             try:
-                price, date = fetch_current_price(ticker)
-                price_line = f"Current price for {ticker}: ${price:.2f} (as of {date})"
+                price, date = fetch_current_price(ticker)                                   
+                price_line = f"Current price for {ticker}: ${price:.2f} (as of {date})"     
             except Exception:
                 price_line = f"Current price for {ticker}: unavailable"
 
             # Fetch news
-            news_items = fetch_news(ticker)
+            news_items = fetch_news(ticker)                                 
             if news_items:
                 news_headlines = "\n".join(
-                    f"- {item.get('headline', '[No headline]')}" for item in news_items
+                    f"- {item.get('headline', '[No headline]')}" for item in news_items             # Use get to avoid KeyError
                 )
-                news_blocks.append(f"{ticker}:\n{price_line}\n{news_headlines}")
+                news_blocks.append(f"{ticker}:\n{price_line}\n{news_headlines}")                    # Combine price and news
             else:
-                news_blocks.append(f"{ticker}:\n{price_line}\nNo recent news found.")
+                news_blocks.append(f"{ticker}:\n{price_line}\nNo recent news found.")               # No news case
 
             # Automatically generate and send chart for each ticker
             try:
@@ -102,8 +107,11 @@ async def ask_ai(ctx, *, question: str):
             except Exception as e:
                 chart_mentions.append(f"Could not generate chart for {ticker}: {e}")
 
+        # Combine news blocks and chart mentions into the prompt
         news_prompt = "\n\n".join(news_blocks)
         chart_prompt = "\n".join(chart_mentions)
+
+        # Construct the full prompt with news and charts
         prompt = (
             f"{news_prompt}\n"
             f"{chart_prompt}\n"
@@ -114,7 +122,9 @@ async def ask_ai(ctx, *, question: str):
     else:
         # No tickers detected: just answer the question directly
         news_items = fetch_general_market_news()
-        news_headlines = "\n".join(f"- {item.get('headline', '[No headline]')}" for item in news_items)
+        news_headlines = "\n".join(f"- {item.get('headline', '[No headline]')}" for item in news_items)       # Use get to avoid KeyError
+
+        # If no tickers, just use general market news
         prompt = (
             f"{news_headlines}\n"
             "You are a helpful financial assistant. Below is the recent conversation:\n"
