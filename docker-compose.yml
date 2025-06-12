@@ -15,14 +15,14 @@ services:
     depends_on:
       - ollama
 
-    ollama:
-      image: ollama/ollama:latest
-      container_name: ollama
-      restart: unless-stopped
-      ports:
-        - "11434:11434"
-      volumes:
-        - ollama_data:/root/.ollama
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
     # Uncomment if you want to override the default command
     # command: ["python", "-m", "bot.main"]
     # If you need to connect to a local Ollama or other LLM service, add extra_hosts or network config here
