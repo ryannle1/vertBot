@@ -6,9 +6,9 @@ services:
     restart: unless-stopped
     env_file:
       - secrets.env
-    # volumes:
-    #   - ./config:/app/config
-    #   - ./data:/app/data
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
     environment:
       - OLLAMA_HOST=http://ollama:11434
     depends_on:
