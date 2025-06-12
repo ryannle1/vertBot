@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 import finnhub
 import os
 import time
+from dotenv import load_dotenv
 
-
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../config/secrets.env'))
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
 
