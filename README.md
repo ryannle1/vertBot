@@ -156,3 +156,12 @@ VertBot leverages the following open-source tools and APIs:
 - [DeepSeek LLM](https://github.com/deepseek-ai/DeepSeek-LLM) — Large Language Model for financial analysis and summaries.
 
 Special thanks to the open-source community for their invaluable libraries and resources.
+
+---
+
+## Disclaimer
+
+VertBot is intended for **personal, educational, and informational use only**.  
+All data, news, and AI-generated insights provided by VertBot—including those from DeepSeek or other LLMs—**do not constitute financial advice**.  
+Always consult a qualified financial advisor before making investment decisions.  
+The developers and contributors of VertBot are not responsible for any actions taken based on the information or analysis provided by this bot.

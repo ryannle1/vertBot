@@ -1,15 +1,15 @@
 from discord.ext import commands
 from ai.deepseek_llm import query_deepseek
-from api.news_data import fetch_news, fetch_general_market_news  # Adjust path as needed
+from api.news_data import fetch_news, fetch_general_market_news  
 import re
 import csv
 import re
 from collections import defaultdict, deque
-from api.market_data import fetch_current_price  # Adjust path as needed
-from bot.commands.chart import get_stock_chart  # Adjust path as needed
+from api.market_data import fetch_current_price                 
+from bot.commands.chart import get_stock_chart                  
 
 # Memory for each channel: channel_id -> deque of (role, message) tuples
-chat_memory = defaultdict(lambda: deque(maxlen=10))  # keep last 10 exchanges per channel
+chat_memory = defaultdict(lambda: deque(maxlen=10))             # keep last 10 exchanges per channel
 
 
 
