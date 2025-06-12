@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  vertbot:
+    image: ryannle01/vertbot:latest
+    container_name: vertbot
+    restart: unless-stopped
+    env_file:
+      - ./config/secrets.env
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      - ollama
+
+    ollama:
+      image: ollama/ollama:latest
+      container_name: ollama
+      restart: unless-stopped
+      ports:
+        - "11434:11434"
+      volumes:
+        - ollama_data:/root/.ollama
+    # Uncomment if you want to override the default command
+    # command: ["python", "-m", "bot.main"]
+    # If you need to connect to a local Ollama or other LLM service, add extra_hosts or network config here
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300  # Check every 5 minutes
+      
+volumes:
+  ollama_data:
