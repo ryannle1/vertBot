@@ -1,4 +1,3 @@
-version: "3.8"
 
 services:
   vertbot:
@@ -6,10 +5,10 @@ services:
     container_name: vertbot
     restart: unless-stopped
     env_file:
-      - ./config/secrets.env
-    volumes:
-      - ./config:/app/config
-      - ./data:/app/data
+      - secrets.env
+    # volumes:
+    #   - ./config:/app/config
+    #   - ./data:/app/data
     environment:
       - OLLAMA_HOST=http://ollama:11434
     depends_on:
