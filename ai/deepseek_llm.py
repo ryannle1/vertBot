@@ -2,7 +2,7 @@ import requests
 import os
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-MODEL_NAME = os.getenv("DEEPSEEK_MODEL", "deepseek-r1")
+MODEL_NAME = os.getenv("DEEPSEEK_MODEL", "deepseek-coder:6.7b-instruct")
 
 def query_deepseek(prompt, system_prompt=None):
     url = f"{OLLAMA_HOST}/api/generate"
