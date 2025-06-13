@@ -7,6 +7,7 @@ import requests
 import os
 import time
 from dotenv import load_dotenv
+import logging
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../config/secrets.env'))
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
@@ -60,13 +61,16 @@ def fetch_current_price(symbol):
     data = response.json()
     
     if "Error Message" in data:
+        logging.error(f"Alpha Vantage API Error for {symbol}: {data}")
         raise ValueError(f"Error fetching data: {data['Error Message']}")
     
     if "Global Quote" not in data:
+        logging.error(f"Alpha Vantage API Response missing Global Quote for {symbol}: {data}")
         raise ValueError("No price data found.")
     
     quote = data["Global Quote"]
     if not quote or "05. price" not in quote:
+        logging.error(f"Alpha Vantage API invalid quote format for {symbol}: {quote}")
         raise ValueError("No price data found.")
     
     price = float(quote["05. price"])
