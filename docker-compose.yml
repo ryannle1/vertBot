@@ -25,9 +25,6 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - vertbot_default
-    # Uncomment if you want to override the default command
-    # command: ["python", "-m", "bot.main"]
-    # If you need to connect to a local Ollama or other LLM service, add extra_hosts or network config here
 
   watchtower:
     image: containrrr/watchtower
