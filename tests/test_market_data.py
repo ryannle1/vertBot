@@ -42,6 +42,7 @@ class TestMarketData(unittest.TestCase):
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "pc": 150.25,  # Previous close
+            "c": 151.25,   # Current price
             "t": 1704067200  # Unix timestamp
         }
         mock_get.return_value = mock_response
