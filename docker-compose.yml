@@ -1,4 +1,3 @@
-
 services:
   vertbot:
     image: ryannle01/vertbot:latest
@@ -13,6 +12,8 @@ services:
       - OLLAMA_HOST=http://ollama:11434
     depends_on:
       - ollama
+    networks:
+      - vertbot_default
 
   ollama:
     image: ollama/ollama:latest
@@ -22,9 +23,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    networks:
+      - vertbot_default
     # Uncomment if you want to override the default command
     # command: ["python", "-m", "bot.main"]
     # If you need to connect to a local Ollama or other LLM service, add extra_hosts or network config here
+
   watchtower:
     image: containrrr/watchtower
     container_name: watchtower
@@ -34,6 +38,12 @@ services:
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=300  # Check every 5 minutes
+    networks:
+      - vertbot_default
       
 volumes:
   ollama_data:
+
+networks:
+  vertbot_default:
+    external: true
