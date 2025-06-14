@@ -1,6 +1,7 @@
-import requests
+import aiohttp
 import os
 import logging
+import asyncio
 import time
 
 # Configure logging
@@ -16,7 +17,7 @@ if OLLAMA_HOST == "http://localhost:11434" and os.getenv("DOCKER_ENV"):
 # Using Mistral 7B Instruct for financial analysis
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct")
 
-def query_deepseek(prompt, system_prompt=None, max_retries=3):
+async def query_deepseek(prompt, system_prompt=None, max_retries=3):
     url = f"{OLLAMA_HOST}/api/generate"
     headers = {"Content-Type": "application/json"}
     
@@ -37,42 +38,44 @@ def query_deepseek(prompt, system_prompt=None, max_retries=3):
         }
     }
     
-    for attempt in range(max_retries):
-        try:
-            logger.info(f"Attempting to connect to Ollama at {OLLAMA_HOST} (attempt {attempt + 1}/{max_retries})")
-            logger.info(f"Using model: {MODEL_NAME}")
-            logger.info(f"Request URL: {url}")
-            
-            # Increase timeout for larger responses
-            response = requests.post(url, json=data, headers=headers, timeout=60)
-            
-            # Log the response status and content for debugging
-            logger.info(f"Response status code: {response.status_code}")
-            
-            if response.status_code == 404:
-                logger.error(f"404 error - Endpoint not found. Please check if Ollama is running and the API endpoint is correct.")
-                raise ConnectionError("Ollama API endpoint not found. Please check if Ollama is running and the API endpoint is correct.")
+    async with aiohttp.ClientSession() as session:
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Attempting to connect to Ollama at {OLLAMA_HOST} (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"Using model: {MODEL_NAME}")
+                logger.info(f"Request URL: {url}")
                 
-            response.raise_for_status()
-            output = response.json()
-            return output.get("response") or output.get("output")
-            
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Request to Ollama timed out (attempt {attempt + 1}/{max_retries})")
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2)  # Wait before retrying
-            
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Failed to connect to Ollama at {OLLAMA_HOST}. Make sure the container is running and accessible.")
-            logger.error(f"Connection error: {str(e)}")
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2)  # Wait before retrying
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error making request to Ollama: {str(e)}")
-            logger.error(f"Response content: {e.response.text if hasattr(e, 'response') else 'No response content'}")
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2)  # Wait before retrying
+                async with session.post(url, json=data, headers=headers, timeout=60) as response:
+                    # Log the response status for debugging
+                    logger.info(f"Response status code: {response.status}")
+                    
+                    if response.status == 404:
+                        logger.error(f"404 error - Endpoint not found. Please check if Ollama is running and the API endpoint is correct.")
+                        raise ConnectionError("Ollama API endpoint not found. Please check if Ollama is running and the API endpoint is correct.")
+                    
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Error response: {error_text}")
+                        raise ConnectionError(f"Ollama API returned status {response.status}")
+                    
+                    output = await response.json()
+                    return output.get("response") or output.get("output")
+                    
+            except asyncio.TimeoutError as e:
+                logger.error(f"Request to Ollama timed out (attempt {attempt + 1}/{max_retries})")
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(2)  # Wait before retrying
+                
+            except aiohttp.ClientError as e:
+                logger.error(f"Failed to connect to Ollama at {OLLAMA_HOST}. Make sure the container is running and accessible.")
+                logger.error(f"Connection error: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(2)  # Wait before retrying
+                
+            except Exception as e:
+                logger.error(f"Error making request to Ollama: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(2)  # Wait before retrying

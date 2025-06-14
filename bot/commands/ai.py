@@ -132,18 +132,18 @@ async def ask_ai(ctx, *, question: str):
             "Continue the conversation and answer the last question in a concise, investor-focused way.\n"
         )
 
-    await ctx.send("💬 Thinking with DeepSeek...")
+    await ctx.send("💬 Thinking with Mistral...")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
 
     try:
-        response = query_deepseek(prompt)
+        response = await query_deepseek(prompt)
         response = remove_chain_of_thought(response)
         if response:
             # Send in safe 1900-character chunks
             for i in range(0, len(response), 1900):
                 await ctx.send(response[i:i+1900])
         else:
-            await ctx.send("🤔 I didn't get a response from DeepSeek.")
+            await ctx.send("🤔 I didn't get a response from Mistral.")
     except Exception as e:
         await ctx.send(f"❌ LLM error: {e}")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
