@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import logging
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../config/secrets.env'))
-ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
 def is_market_open():
     eastern = pytz.timezone('US/Eastern')
@@ -22,26 +22,20 @@ def is_market_open():
 
 @lru_cache(maxsize=100)
 def fetch_closing_price(symbol):
-    """Fetch previous market closing price and date for a symbol using Alpha Vantage."""
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
+    """Fetch previous market closing price and date for a symbol using Finnhub."""
+    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
     response = requests.get(url)
     data = response.json()
     
-    if "Error Message" in data:
-        raise ValueError(f"Error fetching data: {data['Error Message']}")
+    if "error" in data:
+        raise ValueError(f"Error fetching data: {data['error']}")
     
-    if "Time Series (Daily)" not in data:
+    if "c" not in data or "t" not in data:
         raise ValueError("No price data found.")
     
-    # Get the last two trading days
-    daily_data = data["Time Series (Daily)"]
-    dates = sorted(daily_data.keys(), reverse=True)
-    if len(dates) < 2:
-        raise ValueError("Not enough price data found.")
-    
-    # Get the previous day's data (second most recent)
-    last_date = dates[1]
-    last_close = float(daily_data[last_date]["4. close"])
+    # Get the previous day's closing price
+    last_close = float(data["pc"])  # Previous close
+    last_date = datetime.fromtimestamp(data["t"]).strftime('%Y-%m-%d')
     
     return last_close, last_date
 
@@ -49,32 +43,27 @@ _price_cache = {}
 _cache_ttl = timedelta(minutes=5)
 
 def fetch_current_price(symbol):
-    """Fetch the current market price with caching using Alpha Vantage."""
+    """Fetch the current market price with caching using Finnhub."""
     now = datetime.now()
     if symbol in _price_cache:
         price, timestamp = _price_cache[symbol]
         if now - timestamp < _cache_ttl:
             return price, timestamp.strftime('%Y-%m-%d')
 
-    url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
+    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
     response = requests.get(url)
     data = response.json()
     
-    if "Error Message" in data:
-        logging.error(f"Alpha Vantage API Error for {symbol}: {data}")
-        raise ValueError(f"Error fetching data: {data['Error Message']}")
+    if "error" in data:
+        logging.error(f"Finnhub API Error for {symbol}: {data}")
+        raise ValueError(f"Error fetching data: {data['error']}")
     
-    if "Global Quote" not in data:
-        logging.error(f"Alpha Vantage API Response missing Global Quote for {symbol}: {data}")
+    if "c" not in data or "t" not in data:
+        logging.error(f"Finnhub API Response missing data for {symbol}: {data}")
         raise ValueError("No price data found.")
     
-    quote = data["Global Quote"]
-    if not quote or "05. price" not in quote:
-        logging.error(f"Alpha Vantage API invalid quote format for {symbol}: {quote}")
-        raise ValueError("No price data found.")
-    
-    price = float(quote["05. price"])
-    last_date = quote.get("07. latest trading day", now.strftime('%Y-%m-%d'))
+    price = float(data["c"])  # Current price
+    last_date = datetime.fromtimestamp(data["t"]).strftime('%Y-%m-%d')
     
     _price_cache[symbol] = (price, now)
     return price, last_date
