@@ -135,6 +135,7 @@ async def report_market_close():
                     try:
                         price, date = fetch_closing_price(symbol)
                         await channel.send(f"**{symbol.upper()}** closed at **${price:.2f}** on {date}.")
+                        await asyncio.sleep(20)
                     except Exception as e:
                         await channel.send(f"⚠️ Could not fetch closing price for {symbol.upper()}. Error: {e}")
                         continue  # Skip news if no price
@@ -143,7 +144,7 @@ async def report_market_close():
                     try:
                         articles = fetch_news(symbol)
                         if articles:
-                            news_lines = [f"- [{art['title']}]({art['url']})" for art in articles[:5]]
+                            news_lines = [f"- [{art['headline']}]({art['url']})" for art in articles[:5]]
                             news_message = f"Latest news for {symbol.upper()}:\n" + "\n".join(news_lines)
                         else:
                             news_message = f"No recent news found for {symbol.upper()}."
