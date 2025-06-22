@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 import yfinance as yf
 
+# Seccond Iterations, havent figured out what each line does as I havent been able to test
 intents = discord.Intents.default()
 intents.message_content = True  # Needed for user input handling
 
