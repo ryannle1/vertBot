@@ -18,6 +18,8 @@ from api.news_data import fetch_news
 from api.market_data import fetch_closing_price
 from api.market_data import fetch_current_price
 
+from bot.utils.formatters import format_closing_price_report
+
 # STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "CRWV", "KO", "GOOGL", "COST", "BTC"]  # Example symbols, can be extended or made dynamic
 
 BIG_CHANGE_THRESHOLD = 2.5  # Percentage change threshold for significant price changes
@@ -27,7 +29,7 @@ BIG_CHANGE_THRESHOLD = 2.5  # Percentage change threshold for significant price 
 announced_changes = {}
 
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../config/secrets.env'))
+load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Define the channel ID where the bot will send messages
@@ -115,10 +117,17 @@ def send_market_close_report():
 
 async def report_market_close():
     await bot.wait_until_ready()
+    reported_today = set()
+    last_report_date = None
     while not bot.is_closed():
         import pytz, datetime
         eastern = pytz.timezone('US/Eastern')
         now = datetime.datetime.now(eastern)
+
+        # Reset the reported_today set at the start of a new day
+        if last_report_date != now.date():
+            reported_today = set()
+            last_report_date = now.date()
 
         # 4:00 PM market close, Mon–Fri only
         if now.hour == 16 and now.minute == 0 and now.weekday() < 5:
@@ -131,28 +140,19 @@ async def report_market_close():
                 if not channel:
                     continue
                 for symbol in STOCK_SYMBOLS:
-                    # Send closing price
+                    # Only report if not already reported today
+                    if (guild.id, symbol) in reported_today:
+                        continue
                     try:
                         price, date = fetch_closing_price(symbol)
-                        await channel.send(f"**{symbol.upper()}** closed at **${price:.2f}** on {date}.")
-                        await asyncio.sleep(20)
+                        msg = format_closing_price_report(symbol, price, date)
+                        await channel.send(msg)
+                        reported_today.add((guild.id, symbol))
+                        await asyncio.sleep(2)  # Shorter sleep since news is removed
                     except Exception as e:
                         await channel.send(f"⚠️ Could not fetch closing price for {symbol.upper()}. Error: {e}")
-                        continue  # Skip news if no price
-
-                    # Send news
-                    try:
-                        articles = fetch_news(symbol)
-                        if articles:
-                            news_lines = [f"- [{art['headline']}]({art['url']})" for art in articles[:5]]
-                            news_message = f"Latest news for {symbol.upper()}:\n" + "\n".join(news_lines)
-                        else:
-                            news_message = f"No recent news found for {symbol.upper()}."
-                        await channel.send(news_message)
-                    except Exception as e:
-                        await channel.send(f"⚠️ Could not fetch news for {symbol.upper()}. Error: {e}")
-
-                    await asyncio.sleep(1)  # Prevent rate limits
+                        continue
+                await asyncio.sleep(1)  # Prevent rate limits between guilds
             await asyncio.sleep(60)
         else:
             await asyncio.sleep(20)
