@@ -132,7 +132,7 @@ async def ask_ai(ctx, *, question: str):
             "Continue the conversation and answer the last question in a concise, investor-focused way.\n"
         )
 
-    await ctx.send("💬 Thinking with Phi-2...")
+    await ctx.send("💬 Thinking with Phi...")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
 
     try:
@@ -143,7 +143,7 @@ async def ask_ai(ctx, *, question: str):
             for i in range(0, len(response), 1900):
                 await ctx.send(response[i:i+1900])
         else:
-            await ctx.send("🤔 I didn't get a response from Mistral.")
+            await ctx.send("🤔 I didn't get a response from Phi.")
     except Exception as e:
         await ctx.send(f"❌ LLM error: {e}")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
