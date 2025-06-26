@@ -132,7 +132,7 @@ async def ask_ai(ctx, *, question: str):
             "Continue the conversation and answer the last question in a concise, investor-focused way.\n"
         )
 
-    await ctx.send("💬 Thinking with Mistral...")
+    await ctx.send("💬 Thinking with Phi-2...")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
 
     try:

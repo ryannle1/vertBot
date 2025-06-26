@@ -15,7 +15,7 @@ if OLLAMA_HOST == "http://localhost:11434" and os.getenv("DOCKER_ENV"):
     OLLAMA_HOST = "http://ollama:11434"
 
 # Using Mistral 7B Instruct for financial analysis
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct")
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "phi:2")
 
 async def query_deepseek(prompt, system_prompt=None, max_retries=3):
     url = f"{OLLAMA_HOST}/api/generate"
