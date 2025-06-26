@@ -15,13 +15,13 @@ if OLLAMA_HOST == "http://localhost:11434" and os.getenv("DOCKER_ENV"):
     OLLAMA_HOST = "http://ollama:11434"
 
 # Using Mistral 7B Instruct for financial analysis
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "phi")
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "deepseek-r1:1.5b")
 
 async def query_deepseek(prompt, system_prompt=None, max_retries=3):
     url = f"{OLLAMA_HOST}/api/generate"
     headers = {"Content-Type": "application/json"}
     
-    # Format prompt for Phi
+    # Format prompt for DeepSeek R1
     formatted_prompt = f"You are a financial analysis expert. Analyze the following information and provide insights:\n\n{prompt}"
     
     data = {
