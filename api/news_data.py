@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 import pytz
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../config/secrets.env'))
+load_dotenv()
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 # print("DEBUG Finnhub Key:", FINNHUB_API_KEY)
 

@@ -9,7 +9,7 @@ import time
 from dotenv import load_dotenv
 import logging
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../config/secrets.env'))
+load_dotenv()
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
 def is_market_open():

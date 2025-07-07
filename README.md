@@ -41,13 +41,13 @@ VertBot is ideal for investing clubs, trading communities, or anyone who wants s
   - Clear user-facing error messages for invalid symbols, missing API keys, or command misuse.
   - Deletes command messages for a clean channel experience.
 
-### Phase 2: AI Integration & Analysis (DeepSeek + Ollama)
+### Phase 2: AI Integration & Analysis (Phi + Ollama)
 
 - **AI Q&A Command:**  
-  - `!askai <QUESTION or TICKER>` — Summarizes and analyzes recent real news headlines for specified tickers using DeepSeek LLM.
+  - `!askai <QUESTION or TICKER>` — Summarizes and analyzes recent real news headlines for specified tickers using the Phi LLM (via Ollama).
   - Supports multiple tickers and case-insensitive detection.
 - **Natural Language Summaries:**  
-  - DeepSeek model provides readable, actionable market summaries, trend analysis, and explanation of financial jargon or events.
+  - Phi model provides readable, actionable market summaries, trend analysis, and explanation of financial jargon or events.
 
 ### Robust Configuration
 
@@ -87,12 +87,12 @@ vertBot/
     Follow the standard Discord bot invitation process using your bot's OAuth2 URL.
 
 2. **Configure API Keys:**  
-    - Create a `.env` or `secrets.env` file in the `config/` directory.
+    - Create a `.env` file in the **root** of your project directory (where you run the bot).
     - Add your required API keys (e.g., for market data and news providers).  
     - Example:
       ```env
       FINNHUB_API_KEY=your_api_key_here
-      DISORD_TOKEN=your_discord_token_here
+      DISCORD_TOKEN=your_discord_token_here
       ```
 
 3. **Run the Bot:**  
@@ -113,14 +113,45 @@ vertBot/
     - `!setreportchannel` — Set the channel for daily reports (admin only).
 
 5. **Automated Reports:**  
-    VertBot will post daily closing prices and news in the configured channel at market close.
+    VertBot will post daily closing prices (with improved formatting) in the configured channel at market close. News is no longer included in the daily report to reduce clutter.
 
 6. **AI Analysis:**  
-    Use `!askai` to get natural language explanations, summaries, or trend analysis for stocks and financial news.
+    Use `!askai` to get natural language explanations, summaries, or trend analysis for stocks and financial news, powered by the Phi model running locally via Ollama.
 
 ---
 
-## Future Plans
+## Running the Phi Model Locally with Ollama
+
+VertBot uses the [Phi](https://ollama.com/library/phi) model for AI-powered features. To run the model locally:
+
+1. **Install Ollama:**
+   - Follow instructions at [Ollama's website](https://ollama.com/download) for your OS or use Docker (recommended for servers).
+
+2. **Pull the Phi model (in Docker):**
+   - If running Ollama in Docker, use:
+     ```sh
+     docker exec -it ollama ollama pull phi
+     ```
+   - If running Ollama natively, use:
+     ```sh
+     ollama pull phi
+     ```
+
+3. **Verify the model is available:**
+   - List models in your container:
+     ```sh
+     docker exec -it ollama ollama list
+     ```
+
+4. **Configure VertBot to use the model:**
+   - The bot is pre-configured to use `phi` by default. If you want to use a different model, set the `OLLAMA_MODEL` environment variable in your `.env` file.
+
+5. **Start VertBot and Ollama:**
+   - Make sure both the Ollama container and VertBot are running. The bot will connect to Ollama at `http://localhost:11434` by default (or as set in your `.env`).
+
+---
+
+## Roadmap & Future Plans
 
 VertBot is designed for ongoing growth and adaptability. Planned enhancements include:
 
@@ -136,13 +167,16 @@ VertBot is designed for ongoing growth and adaptability. Planned enhancements in
 - **Portfolio Tracking:**  
     Allow users to track and analyze their own portfolios within Discord.
 
-- **Enhanced AI Capabilities:**  
-    Support more LLMs and provide deeper, context-aware financial insights.
+- **AI Model Flexibility:**  
+    Support for more LLMs and easy switching between models (e.g., Dolphin-Phi, TinyLlama) for different hardware and use cases.
+
+- **Improved Reporting:**  
+    More customizable and visually appealing daily/weekly reports, with options for summary, highlights, and user preferences.
 
 - **Community Feedback:**  
     Actively gather user suggestions to prioritize new features and data types.
 
-Contributions and feature requests are welcome—help shape VertBot’s future!
+Contributions and feature requests are welcome—help shape VertBot's future!
 
 ---
 
@@ -152,8 +186,7 @@ VertBot leverages the following open-source tools and APIs:
 
 - [discord.py](https://github.com/Rapptz/discord.py) — Python library for building Discord bots.
 - [Finnhub](https://finnhub.io/) — Real-time stock market data and news API.
-- [Ollama](https://ollama.com/) — Local LLM orchestration for AI-powered features.
-- [DeepSeek LLM](https://github.com/deepseek-ai/DeepSeek-LLM) — Large Language Model for financial analysis and summaries.
+- [Ollama](https://ollama.com/) — Local LLM orchestration for AI-powered features (now using the Phi model by default).
 
 Special thanks to the open-source community for their invaluable libraries and resources.
 

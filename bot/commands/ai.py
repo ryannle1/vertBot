@@ -31,6 +31,9 @@ def remove_chain_of_thought(text):
     return text  # No marker found, return as-is
 
 
+
+
+
 # Load valid tickers from CSV file
 def load_valid_tickers(csv_path="data/tickers.csv"):
     tickers = set()
@@ -45,6 +48,13 @@ def load_valid_tickers(csv_path="data/tickers.csv"):
 VALID_TICKERS = load_valid_tickers()
 
 
+
+
+
+
+
+
+
 # Extract tickers from a message
 def extract_tickers_from_message(msg):
     # Find all words starting with $, followed by 1–5 alphanumeric chars (case-insensitive)
@@ -56,6 +66,15 @@ def extract_tickers_from_message(msg):
         if t in VALID_TICKERS:
             tickers.add(t)
     return list(tickers)
+
+
+
+
+
+
+
+
+
 
 
 # Command to ask the AI
@@ -132,7 +151,7 @@ async def ask_ai(ctx, *, question: str):
             "Continue the conversation and answer the last question in a concise, investor-focused way.\n"
         )
 
-    await ctx.send("💬 Thinking with Mistral...")
+    await ctx.send("💬 Thinking with DeepSeek R1...")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
 
     try:
@@ -143,7 +162,7 @@ async def ask_ai(ctx, *, question: str):
             for i in range(0, len(response), 1900):
                 await ctx.send(response[i:i+1900])
         else:
-            await ctx.send("🤔 I didn't get a response from Mistral.")
+            await ctx.send("🤔 I didn't get a response from Phi.")
     except Exception as e:
         await ctx.send(f"❌ LLM error: {e}")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
