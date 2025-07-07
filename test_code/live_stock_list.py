@@ -4,7 +4,10 @@ import discord
 from discord.ext import commands
 import yfinance as yf
 
-# Seccond Iterations, havent figured out what each line does as I havent been able to test
+# Just merged the updated main branch to this branch, now pushing to see if the changed went though
+
+
+# Second Iterations, havent figured out what each line does as I havent been able to test
 intents = discord.Intents.default()
 intents.message_content = True  # Needed for user input handling
 
