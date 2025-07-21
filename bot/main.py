@@ -153,7 +153,13 @@ async def report_market_close():
                         await channel.send(f"⚠️ Could not fetch closing price for {symbol.upper()}. Error: {e}")
                         continue
                 await asyncio.sleep(1)  # Prevent rate limits between guilds
-            await asyncio.sleep(60)
+            # After sending reports, sleep until the minute is no longer 16:00 to avoid duplicate sends
+            while True:
+                now = datetime.datetime.now(eastern)
+                if not (now.hour == 16 and now.minute == 0):
+                    break
+                await asyncio.sleep(5)
+            await asyncio.sleep(1)  # Small buffer before next loop
         else:
             await asyncio.sleep(20)
 
