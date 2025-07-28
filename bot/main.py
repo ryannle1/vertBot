@@ -145,8 +145,16 @@ async def report_market_close():
                         continue
                     try:
                         price, date = fetch_closing_price(symbol)
-                        msg = format_closing_price_report(symbol, price, date)
-                        await channel.send(msg)
+                        # Use the same format as the /price command
+                        message = (
+                            f"📈 **Stock Price Report** 📈\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"**Symbol:** `{symbol.upper()}`\n"
+                            f"**Last Close:** **${price:.2f}**\n"
+                            f"**Date:** `{date}`\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━"
+                        )
+                        await channel.send(message)
                         reported_today.add((guild.id, symbol))
                         await asyncio.sleep(2)  # Shorter sleep since news is removed
                     except Exception as e:
@@ -165,13 +173,13 @@ async def report_market_close():
 
     
 
-# Schedule the task for 4pm US/Eastern every day
-scheduler.add_job(
-    send_market_close_report,
-    'cron',
-    hour=16, minute=0,
-    timezone=timezone('US/Eastern')
-)
+# Remove the duplicate scheduled job - the continuous loop above handles the daily reports
+# scheduler.add_job(
+#     send_market_close_report,
+#     'cron',
+#     hour=16, minute=0,
+#     timezone=timezone('US/Eastern')
+# )
 
 
 
