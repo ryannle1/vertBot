@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from api.market_data import fetch_closing_price, fetch_current_price
 from api.news_data import fetch_news
 from config.constants import STOCK_SYMBOLS
+from bot.commands.tickers import get_guild_tickers
 import asyncio
 
 CHANNELS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'channels.json')
@@ -63,7 +64,13 @@ async def report(ctx):
     except Exception:
         pass
 
-    for symbol in STOCK_SYMBOLS:
+    # Get user-defined tickers for this guild
+    guild_tickers = get_guild_tickers(ctx.guild.id)
+    if not guild_tickers:
+        await ctx.send("📋 No tickers configured for this server. Use `!addticker SYMBOL` to add some!")
+        return
+    
+    for symbol in guild_tickers:
         try:
             close_price, date = fetch_closing_price(symbol)
             current_price, _ = fetch_current_price(symbol)

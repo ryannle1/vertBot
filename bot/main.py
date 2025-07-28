@@ -12,6 +12,7 @@ import asyncio
 from config.constants import STOCK_SYMBOLS
 
 from bot.commands.report import load_channels
+from bot.commands.tickers import get_guild_tickers
 
 from api.news_data import fetch_news
 
@@ -50,15 +51,6 @@ scheduler = AsyncIOScheduler()
 
 
 async def monitor_big_stock_changes():
-    # Get yesterday's close for each stock (one time at bot start; you may want to refresh this daily for best accuracy)
-    yesterdays_closes = {}
-    for symbol in STOCK_SYMBOLS:
-        try:
-            price,_ = fetch_closing_price(symbol)
-            yesterdays_closes[symbol] = price
-        except Exception as e:
-            print(f"Could not fetch closing price for {symbol}: {e}")
-
     # Run periodic check during market hours
     eastern = pytz.timezone('US/Eastern')
     while True:
@@ -76,7 +68,22 @@ async def monitor_big_stock_changes():
                 channel = guild.get_channel(channel_id)
                 if not channel:
                     continue
-                for symbol in STOCK_SYMBOLS:
+                
+                # Get user-defined tickers for this guild
+                guild_tickers = get_guild_tickers(guild.id)
+                if not guild_tickers:
+                    continue  # Skip if no tickers configured for this guild
+                
+                # Get yesterday's close for each stock (refresh daily for best accuracy)
+                yesterdays_closes = {}
+                for symbol in guild_tickers:
+                    try:
+                        price,_ = fetch_closing_price(symbol)
+                        yesterdays_closes[symbol] = price
+                    except Exception as e:
+                        print(f"Could not fetch closing price for {symbol}: {e}")
+                
+                for symbol in guild_tickers:
                     try:
                         curr_price,_ = fetch_current_price(symbol)
                         close_price = yesterdays_closes.get(symbol)
@@ -139,7 +146,12 @@ async def report_market_close():
                 channel = guild.get_channel(channel_id)
                 if not channel:
                     continue
-                for symbol in STOCK_SYMBOLS:
+                # Get user-defined tickers for this guild
+                guild_tickers = get_guild_tickers(guild.id)
+                if not guild_tickers:
+                    continue  # Skip if no tickers configured for this guild
+                
+                for symbol in guild_tickers:
                     # Only report if not already reported today
                     if (guild.id, symbol) in reported_today:
                         continue
@@ -194,6 +206,7 @@ from bot.commands.report import report
 from bot.commands.ai import ask_ai
 from bot.commands.news import get_general_news
 from bot.commands.chart import get_stock_chart
+from bot.commands.tickers import add_ticker, remove_ticker, list_tickers, reset_tickers, clear_tickers, ticker_help
 
 
 
@@ -206,6 +219,12 @@ bot.add_command(get_price)
 bot.add_command(get_news)
 bot.add_command(get_current_price)
 bot.add_command(set_report_channel)
+bot.add_command(add_ticker)
+bot.add_command(remove_ticker)
+bot.add_command(list_tickers)
+bot.add_command(reset_tickers)
+bot.add_command(clear_tickers)
+bot.add_command(ticker_help)
 
 
 
