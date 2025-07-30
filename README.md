@@ -95,7 +95,16 @@ vertBot/
       DISCORD_TOKEN=your_discord_token_here
       ```
 
-3. **Run the Bot:**  
+3. **Configure the Bot:**
+    - Copy example configuration files:
+      ```bash
+      cp config/channels.json.example config/channels.json
+      cp config/tickers.json.example config/tickers.json
+      ```
+    - Edit the files with your Discord server and channel IDs
+    - See `config/README.md` for detailed setup instructions
+
+4. **Run the Bot:**  
     - Install dependencies:  
       ```bash
       pip install -r requirements.txt

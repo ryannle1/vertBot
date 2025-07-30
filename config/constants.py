@@ -1,1 +1,0 @@
-STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "CRWV", "KO", "GOOGL", "COST"]

@@ -38,6 +38,13 @@ node_modules/
 .env
 config/secrets.env
 
+# Ignore configuration files with sensitive data
+config/channels.json
+config/tickers.json
+config/*.json
+config/*.yaml
+config/*.yml
+
 
 # Ignore OneDrive sync files
 *.tmp
