@@ -9,10 +9,14 @@ import json
 from dotenv import load_dotenv
 import asyncio
 
-from config.constants import STOCK_SYMBOLS
-
 from bot.commands.report import load_channels
 from bot.commands.tickers import get_guild_tickers
+
+# Fallback stock symbols if config file is not available
+try:
+    from config.constants import STOCK_SYMBOLS
+except ImportError:
+    STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NFLX", "COST", "KO"]
 
 from api.news_data import fetch_news
 

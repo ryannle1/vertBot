@@ -133,7 +133,12 @@ async def reset_tickers(ctx):
     except Exception:
         pass
     
-    from config.constants import STOCK_SYMBOLS
+    # Fallback stock symbols if config file is not available
+    try:
+        from config.constants import STOCK_SYMBOLS
+    except ImportError:
+        STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NFLX", "COST", "KO"]
+    
     guild_id = str(ctx.guild.id)
     
     set_guild_tickers(guild_id, STOCK_SYMBOLS.copy())
