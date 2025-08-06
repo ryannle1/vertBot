@@ -111,90 +111,241 @@ async def monitor_big_stock_changes():
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}!')
-    scheduler.start()
-    bot.loop.create_task(monitor_big_stock_changes())
-
-
-
-
-# Scheduled job function
-def send_market_close_report():
-    # Run in event loop because Discord API is async
-    bot.loop.create_task(report_market_close())
-
-async def report_market_close():
-    await bot.wait_until_ready()
-    reported_today = set()
-    last_report_date = None
-    while not bot.is_closed():
-        import pytz, datetime
-        eastern = pytz.timezone('US/Eastern')
-        now = datetime.datetime.now(eastern)
-
-        # Reset the reported_today set at the start of a new day
-        if last_report_date != now.date():
-            reported_today = set()
-            last_report_date = now.date()
-
-        # 4:00 PM market close, Mon–Fri only
-        if now.hour == 16 and now.minute == 0 and now.weekday() < 5:
-            channels = load_channels()
-            for guild in bot.guilds:
-                channel_id = channels.get(str(guild.id))
-                if not channel_id:
-                    continue
-                channel = guild.get_channel(channel_id)
-                if not channel:
-                    continue
-                # Get user-defined tickers for this guild
-                guild_tickers = get_guild_tickers(guild.id)
-                if not guild_tickers:
-                    continue  # Skip if no tickers configured for this guild
-                
-                for symbol in guild_tickers:
-                    # Only report if not already reported today
-                    if (guild.id, symbol) in reported_today:
-                        continue
-                    try:
-                        price, date = fetch_closing_price(symbol)
-                        # Use the same format as the /price command
-                        message = (
-                            f"📈 **Stock Price Report** 📈\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"**Symbol:** `{symbol.upper()}`\n"
-                            f"**Last Close:** **${price:.2f}**\n"
-                            f"**Date:** `{date}`\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━"
-                        )
-                        await channel.send(message)
-                        reported_today.add((guild.id, symbol))
-                        await asyncio.sleep(2)  # Shorter sleep since news is removed
-                    except Exception as e:
-                        await channel.send(f"⚠️ Could not fetch closing price for {symbol.upper()}. Error: {e}")
-                        continue
-                await asyncio.sleep(1)  # Prevent rate limits between guilds
-            # After sending reports, sleep until the minute is no longer 16:00 to avoid duplicate sends
-            while True:
-                now = datetime.datetime.now(eastern)
-                if not (now.hour == 16 and now.minute == 0):
-                    break
-                await asyncio.sleep(5)
-            await asyncio.sleep(1)  # Small buffer before next loop
-        else:
-            await asyncio.sleep(20)
-
     
+    # Log current time in different timezones for debugging
+    eastern = pytz.timezone('US/Eastern')
+    utc = pytz.UTC
+    now_eastern = datetime.datetime.now(eastern)
+    now_utc = datetime.datetime.now(utc)
+    
+    print(f"Current time - UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"Current time - Eastern: {now_eastern.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"Day of week: {now_eastern.strftime('%A')} (weekday: {now_eastern.weekday()})")
+    
+    # Start scheduler
+    scheduler.start()
+    print("Scheduler started successfully")
+    
+    # Log scheduled jobs
+    jobs = scheduler.get_jobs()
+    print(f"Active scheduled jobs: {len(jobs)}")
+    for job in jobs:
+        next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "Not scheduled"
+        print(f"  - {job.id}: Next run at {next_run}")
+    
+    # Start the big stock changes monitor
+    bot.loop.create_task(monitor_big_stock_changes())
+    print("Big stock changes monitor started")
 
-# Remove the duplicate scheduled job - the continuous loop above handles the daily reports
-# scheduler.add_job(
-#     send_market_close_report,
-#     'cron',
-#     hour=16, minute=0,
-#     timezone=timezone('US/Eastern')
-# )
+
+# Track if we've already sent a report today to avoid duplicates
+daily_report_sent = False
+last_report_date = None
 
 
+# Scheduled job function for market close report
+async def send_market_close_report():
+    """Send market close report at 4:00 PM Eastern time"""
+    global daily_report_sent, last_report_date
+    
+    await bot.wait_until_ready()
+    
+    # Check if it's a weekday
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.datetime.now(eastern)
+    
+    if now.weekday() >= 5:  # Weekend
+        print(f"Market close report skipped - weekend ({now.strftime('%A')})")
+        return
+    
+    # Reset daily flag if it's a new day
+    if last_report_date != now.date():
+        daily_report_sent = False
+        last_report_date = now.date()
+        print(f"Reset daily report flag for {now.date()}")
+    
+    # Check if we've already sent a report today
+    if daily_report_sent:
+        print(f"Market close report already sent today ({now.date()})")
+        return
+    
+    print(f"Sending market close report at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    
+    try:
+        channels = load_channels()
+        if not channels:
+            print("No channels configured for market close reports")
+            return
+        
+        for guild_id, channel_id in channels.items():
+            guild = bot.get_guild(int(guild_id))
+            if not guild:
+                print(f"Guild {guild_id} not found")
+                continue
+                
+            channel = guild.get_channel(channel_id)
+            if not channel:
+                print(f"Channel {channel_id} not found in guild {guild.name}")
+                continue
+            
+            print(f"Sending market close report to {guild.name} - {channel.name}")
+            
+            # Get user-defined tickers for this guild
+            guild_tickers = get_guild_tickers(guild.id)
+            if not guild_tickers:
+                print(f"No tickers configured for guild {guild.name}")
+                continue
+            
+            # Send header message
+            await channel.send("📊 **Daily Market Close Report** 📊\n━━━━━━━━━━━━━━━━━━━━━━")
+            
+            # Send report for each symbol
+            for symbol in guild_tickers:
+                try:
+                    price, date = fetch_closing_price(symbol)
+                    # Use the same format as the /price command
+                    message = (
+                        f"📈 **Stock Price Report** 📈\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"**Symbol:** `{symbol.upper()}`\n"
+                        f"**Last Close:** **${price:.2f}**\n"
+                        f"**Date:** `{date}`\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━"
+                    )
+                    await channel.send(message)
+                    await asyncio.sleep(2)  # Rate limiting
+                except Exception as e:
+                    error_msg = f"⚠️ Could not fetch closing price for {symbol.upper()}. Error: {e}"
+                    await channel.send(error_msg)
+                    print(f"Error fetching {symbol}: {e}")
+                    await asyncio.sleep(2)
+            
+            # Send footer
+            await channel.send("━━━━━━━━━━━━━━━━━━━━━━\n📈 *Market close report complete*")
+        
+        # Mark as sent for today
+        daily_report_sent = True
+        print(f"Market close report completed successfully for {now.date()}")
+        
+    except Exception as e:
+        print(f"Error in market close report: {e}")
 
+
+# Schedule the task for 4pm US/Eastern every weekday
+scheduler.add_job(
+    send_market_close_report,
+    'cron',
+    day_of_week='mon-fri',
+    hour=16, 
+    minute=0,
+    timezone=timezone('US/Eastern'),
+    id='market_close_report'
+)
+
+print("Scheduled market close report for 4:00 PM Eastern time, weekdays only")
+
+
+# Manual command to trigger market close report for testing
+@bot.command(name="testreport")
+@commands.has_permissions(administrator=True)
+async def test_market_close_report(ctx):
+    """Manually trigger the market close report for testing purposes. Admin only."""
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    await ctx.send("🔄 Triggering market close report...")
+    await send_market_close_report()
+    await ctx.send("✅ Market close report completed!")
+
+
+@bot.command(name="schedulerstatus")
+@commands.has_permissions(administrator=True)
+async def scheduler_status(ctx):
+    """Check the status of scheduled jobs. Admin only."""
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    jobs = scheduler.get_jobs()
+    if jobs:
+        status_msg = "📅 **Scheduled Jobs:**\n"
+        for job in jobs:
+            next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "Not scheduled"
+            status_msg += f"• **{job.id}**: Next run at {next_run}\n"
+    else:
+        status_msg = "📅 No scheduled jobs found."
+    
+    await ctx.send(status_msg)
+
+
+@bot.command(name="resetreport")
+@commands.has_permissions(administrator=True)
+async def reset_daily_report(ctx):
+    """Manually reset the daily report flag. Admin only."""
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    global daily_report_sent, last_report_date
+    daily_report_sent = False
+    last_report_date = None
+    
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.datetime.now(eastern)
+    
+    await ctx.send(f"🔄 Daily report flag reset. Current time: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"Daily report flag manually reset by {ctx.author.name} at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+
+
+@bot.command(name="testchannel")
+@commands.has_permissions(administrator=True)
+async def test_channel(ctx):
+    """Test if the bot can send messages to the configured report channel. Admin only."""
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    channels = load_channels()
+    guild_id = str(ctx.guild.id)
+    channel_id = channels.get(guild_id)
+    
+    if not channel_id:
+        await ctx.send("❌ No report channel configured for this server. Use `!setreportchannel` first.")
+        return
+    
+    channel = ctx.guild.get_channel(channel_id)
+    if not channel:
+        await ctx.send(f"❌ Configured channel {channel_id} not found in this server.")
+        return
+    
+    # Check bot permissions
+    bot_member = ctx.guild.get_member(bot.user.id)
+    permissions = channel.permissions_for(bot_member)
+    
+    if not permissions.send_messages:
+        await ctx.send(f"❌ Bot doesn't have permission to send messages in {channel.mention}")
+        return
+    
+    if not permissions.view_channel:
+        await ctx.send(f"❌ Bot doesn't have permission to view {channel.mention}")
+        return
+    
+    # Test sending a message
+    try:
+        test_msg = await channel.send("🧪 **Test Message** - Bot is working correctly!")
+        await ctx.send(f"✅ Successfully sent test message to {channel.mention}")
+        
+        # Delete test message after 5 seconds
+        await asyncio.sleep(5)
+        await test_msg.delete()
+        
+    except Exception as e:
+        await ctx.send(f"❌ Failed to send test message: {e}")
 
 
 # Add commands here for now
@@ -225,6 +376,10 @@ bot.add_command(list_tickers)
 bot.add_command(reset_tickers)
 bot.add_command(clear_tickers)
 bot.add_command(ticker_help)
+bot.add_command(test_market_close_report)
+bot.add_command(scheduler_status)
+bot.add_command(test_channel)
+bot.add_command(reset_daily_report)
 
 
 
