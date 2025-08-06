@@ -380,10 +380,6 @@ bot.add_command(list_tickers)
 bot.add_command(reset_tickers)
 bot.add_command(clear_tickers)
 bot.add_command(ticker_help)
-bot.add_command(test_market_close_report)
-bot.add_command(scheduler_status)
-bot.add_command(test_channel)
-bot.add_command(reset_daily_report)
 
 
 
