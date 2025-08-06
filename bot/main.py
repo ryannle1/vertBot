@@ -249,20 +249,6 @@ scheduler.add_job(
 print("Scheduled market close report for 4:00 PM Eastern time, weekdays only")
 
 
-# Manual command to trigger market close report for testing
-@bot.command(name="testreport")
-@commands.has_permissions(administrator=True)
-async def test_market_close_report(ctx):
-    """Manually trigger the market close report for testing purposes. Admin only."""
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    
-    await ctx.send("🔄 Triggering market close report...")
-    await send_market_close_report()
-    await ctx.send("✅ Market close report completed!")
-
 
 @bot.command(name="schedulerstatus")
 @commands.has_permissions(administrator=True)
