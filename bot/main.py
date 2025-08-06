@@ -250,6 +250,9 @@ print("Scheduled market close report for 4:00 PM Eastern time, weekdays only")
 
 
 
+
+
+
 @bot.command(name="schedulerstatus")
 @commands.has_permissions(administrator=True)
 async def scheduler_status(ctx):
@@ -291,51 +294,6 @@ async def reset_daily_report(ctx):
     print(f"Daily report flag manually reset by {ctx.author.name} at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
 
-@bot.command(name="testchannel")
-@commands.has_permissions(administrator=True)
-async def test_channel(ctx):
-    """Test if the bot can send messages to the configured report channel. Admin only."""
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    
-    channels = load_channels()
-    guild_id = str(ctx.guild.id)
-    channel_id = channels.get(guild_id)
-    
-    if not channel_id:
-        await ctx.send("❌ No report channel configured for this server. Use `!setreportchannel` first.")
-        return
-    
-    channel = ctx.guild.get_channel(channel_id)
-    if not channel:
-        await ctx.send(f"❌ Configured channel {channel_id} not found in this server.")
-        return
-    
-    # Check bot permissions
-    bot_member = ctx.guild.get_member(bot.user.id)
-    permissions = channel.permissions_for(bot_member)
-    
-    if not permissions.send_messages:
-        await ctx.send(f"❌ Bot doesn't have permission to send messages in {channel.mention}")
-        return
-    
-    if not permissions.view_channel:
-        await ctx.send(f"❌ Bot doesn't have permission to view {channel.mention}")
-        return
-    
-    # Test sending a message
-    try:
-        test_msg = await channel.send("🧪 **Test Message** - Bot is working correctly!")
-        await ctx.send(f"✅ Successfully sent test message to {channel.mention}")
-        
-        # Delete test message after 5 seconds
-        await asyncio.sleep(5)
-        await test_msg.delete()
-        
-    except Exception as e:
-        await ctx.send(f"❌ Failed to send test message: {e}")
 
 
 # Add commands here for now
