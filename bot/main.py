@@ -206,13 +206,13 @@ async def send_market_close_report():
             # Send report for each symbol
             for symbol in guild_tickers:
                 try:
-                    price, date = fetch_closing_price(symbol)
+                    price, date = fetch_current_price(symbol)
                     # Use the same format as the /price command
                     message = (
                         f"📈 **Stock Price Report** 📈\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"**Symbol:** `{symbol.upper()}`\n"
-                        f"**Last Close:** **${price:.2f}**\n"
+                        f"**Closing Price:** **${price:.2f}**\n"
                         f"**Date:** `{date}`\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━"
                     )
