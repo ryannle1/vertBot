@@ -387,7 +387,8 @@ async def on_command_error(ctx, error):
         await ctx.send(
             f"❓ **Command not recognized:** `{ctx.message.content}`\n\n"
             f"**Available commands:**\n"
-            f"• `!help` - Show all commands\n"
+            f"• `!bothelp` - Show all commands\n"
+            f"• `!help` - Show Discord.py built-in help\n"
             f"• `!price SYMBOL` - Get stock price\n"
             f"• `!addticker SYMBOL` - Add stock to monitor\n"
             f"• `!listtickers` - Show monitored stocks\n"
@@ -447,8 +448,8 @@ async def ping(ctx):
     logger.info("Ping command executed successfully")
 
 
-@bot.command(name="help")
-async def help_command(ctx):
+@bot.command(name="bothelp")
+async def bot_help_command(ctx):
     """Show help information and available commands."""
     help_embed = discord.Embed(
         title="🤖 VertBot Help",
@@ -491,7 +492,8 @@ async def help_command(ctx):
         name="🔧 Utility Commands",
         value=(
             "• `!ping` - Test if bot is responding\n"
-            "• `!help` - Show this help message"
+            "• `!bothelp` - Show this help message\n"
+            "• `!help` - Show Discord.py built-in help"
         ),
         inline=False
     )
@@ -499,7 +501,7 @@ async def help_command(ctx):
     help_embed.set_footer(text="Prefix: ! | Example: !price AAPL")
     
     await ctx.send(embed=help_embed)
-    logger.info(f"Help command executed by {ctx.author}")
+    logger.info(f"Bot help command executed by {ctx.author}")
 
 
 # Load all command modules
