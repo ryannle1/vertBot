@@ -266,6 +266,31 @@ async def on_ready():
     """Initialize bot when ready."""
     logger.info(f'Bot logged in as {bot.user}')
     
+    # Debug: List all registered commands
+    logger.info("=== REGISTERED COMMANDS ===")
+    for cmd in bot.commands:
+        logger.info(f"✓ {cmd.name}: {cmd.help or 'No help text'}")
+    logger.info(f"Total commands: {len(bot.commands)}")
+    logger.info("==========================")
+    
+    # Check if commands are properly loaded
+    if len(bot.commands) == 0:
+        logger.error("⚠️ NO COMMANDS LOADED! Bot will not respond to any commands!")
+    else:
+        logger.info(f"✅ {len(bot.commands)} commands loaded successfully")
+    
+    # Check bot permissions in each guild
+    for guild in bot.guilds:
+        logger.info(f"Guild: {guild.name} (ID: {guild.id})")
+        
+        # Check bot's permissions
+        bot_member = guild.get_member(bot.user.id)
+        if bot_member:
+            permissions = bot_member.guild_permissions
+            logger.info(f"  - Send Messages: {permissions.send_messages}")
+            logger.info(f"  - Read Messages: {permissions.read_messages}")
+            logger.info(f"  - Use Slash Commands: {permissions.use_slash_commands}")
+    
     # Log timezone information for debugging
     eastern = pytz.timezone(MARKET_TIMEZONE)
     now_eastern = datetime.datetime.now(eastern)
@@ -349,6 +374,132 @@ async def on_guild_join(guild):
 async def on_guild_remove(guild):
     """Handle bot being removed from a guild."""
     logger.info(f"Bot removed from guild: {guild.name} (ID: {guild.id})")
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Handle command errors and provide helpful feedback."""
+    if isinstance(error, commands.CommandNotFound):
+        # Command not recognized
+        logger.warning(f"Unknown command attempted: '{ctx.message.content}' by {ctx.author} in {ctx.guild}")
+        
+        # Send helpful message to user
+        await ctx.send(
+            f"❓ **Command not recognized:** `{ctx.message.content}`\n\n"
+            f"**Available commands:**\n"
+            f"• `!help` - Show all commands\n"
+            f"• `!price SYMBOL` - Get stock price\n"
+            f"• `!addticker SYMBOL` - Add stock to monitor\n"
+            f"• `!listtickers` - Show monitored stocks\n"
+            f"• `!tickerhelp` - Get help with ticker commands"
+        )
+        
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"⚠️ **Missing argument:** `{ctx.command}` requires `{error.param.name}`")
+        logger.warning(f"Missing argument for {ctx.command}: {error.param.name}")
+        
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"⚠️ **Invalid argument:** Please check your input for `{ctx.command}`")
+        logger.warning(f"Bad argument for {ctx.command}: {error}")
+        
+    elif isinstance(error, commands.CommandInvokeError):
+        # This wraps the actual error
+        original_error = getattr(error, 'original', error)
+        logger.error(f"Command {ctx.command} failed: {original_error}", exc_info=True)
+        await ctx.send(f"🚨 **Error executing command:** {str(original_error)}")
+        
+    else:
+        logger.error(f"Unhandled command error: {error}", exc_info=True)
+        await ctx.send(f"🚨 **Unexpected error:** {str(error)}")
+
+
+@bot.event
+async def on_message(message):
+    """Log all messages for debugging."""
+    # Don't respond to bot's own messages
+    if message.author == bot.user:
+        return
+    
+    # Log message content (for debugging)
+    if message.content.startswith('!'):
+        logger.info(f"Command attempt: '{message.content}' by {message.author} in {message.guild}")
+    
+    # Process commands (required for on_message)
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_command(ctx):
+    """Log successful command usage."""
+    logger.info(f"Command executed: {ctx.command.name} by {ctx.author} in {ctx.guild}")
+
+
+@bot.event
+async def on_command_completion(ctx):
+    """Log successful command completion."""
+    logger.info(f"Command completed: {ctx.command.name} by {ctx.author}")
+
+
+@bot.command(name="ping")
+async def ping(ctx):
+    """Simple test command to verify bot is working."""
+    await ctx.send("🏓 **Pong!** Bot is responding to commands!")
+    logger.info("Ping command executed successfully")
+
+
+@bot.command(name="help")
+async def help_command(ctx):
+    """Show help information and available commands."""
+    help_embed = discord.Embed(
+        title="🤖 VertBot Help",
+        description="Your personal stock market monitoring assistant",
+        color=0x00FF00
+    )
+    
+    help_embed.add_field(
+        name="📊 Stock Commands",
+        value=(
+            "• `!price SYMBOL` - Get stock closing price\n"
+            "• `!current SYMBOL` - Get live stock price\n"
+            "• `!chart SYMBOL` - Get price chart\n"
+            "• `!news SYMBOL` - Get stock news"
+        ),
+        inline=False
+    )
+    
+    help_embed.add_field(
+        name="⚙️ Setup Commands",
+        value=(
+            "• `!setreportchannel` - Set daily report channel\n"
+            "• `!addticker SYMBOL` - Add stock to monitor\n"
+            "• `!removeticker SYMBOL` - Remove stock from monitoring\n"
+            "• `!listtickers` - Show monitored stocks"
+        ),
+        inline=False
+    )
+    
+    help_embed.add_field(
+        name="🤖 AI Commands",
+        value=(
+            "• `!ask QUESTION` - Ask AI about stocks\n"
+            "• `!tickerhelp` - Detailed ticker help"
+        ),
+        inline=False
+    )
+    
+    help_embed.add_field(
+        name="🔧 Utility Commands",
+        value=(
+            "• `!ping` - Test if bot is responding\n"
+            "• `!help` - Show this help message"
+        ),
+        inline=False
+    )
+    
+    help_embed.set_footer(text="Prefix: ! | Example: !price AAPL")
+    
+    await ctx.send(embed=help_embed)
+    logger.info(f"Help command executed by {ctx.author}")
 
 
 # Load all command modules

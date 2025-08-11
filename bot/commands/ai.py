@@ -166,3 +166,8 @@ async def ask_ai(ctx, *, question: str):
     except Exception as e:
         await ctx.send(f"❌ LLM error: {e}")
     await ctx.send(f"━━━━━━━━━━━━━━━━━━━━━━\n")
+
+
+async def setup(bot):
+    """Add AI commands to the bot."""
+    bot.add_command(ask_ai)

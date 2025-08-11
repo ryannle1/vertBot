@@ -59,3 +59,9 @@ async def get_general_news(ctx):
     except Exception as e:
         logger.error(f"Error fetching general market news: {e}")
         raise NewsDataException("Market", str(e))
+
+
+async def setup(bot):
+    """Add news commands to the bot."""
+    bot.add_command(get_news)
+    bot.add_command(get_general_news)

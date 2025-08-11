@@ -173,3 +173,8 @@ async def generate_chart_image(symbol: str, period: str = "1mo", interval: str =
     plt.close()
 
     return buf
+
+
+async def setup(bot):
+    """Add chart commands to the bot."""
+    bot.add_command(get_stock_chart)

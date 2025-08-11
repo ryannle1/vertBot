@@ -199,4 +199,14 @@ async def ticker_help(ctx):
         "💡 **Tip:** Start by adding a few stocks you want to monitor!"
     )
     
-    await ctx.send(help_message) 
+    await ctx.send(help_message)
+
+
+async def setup(bot):
+    """Add ticker management commands to the bot."""
+    bot.add_command(add_ticker)
+    bot.add_command(remove_ticker)
+    bot.add_command(list_tickers)
+    bot.add_command(reset_tickers)
+    bot.add_command(clear_tickers)
+    bot.add_command(ticker_help) 

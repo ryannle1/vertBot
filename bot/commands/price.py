@@ -74,3 +74,9 @@ async def get_current_price(ctx, symbol: str):
     except Exception as e:
         logger.error(f"Error fetching current price for {symbol}: {e}")
         raise MarketDataException(symbol, str(e))
+
+
+async def setup(bot):
+    """Add price commands to the bot."""
+    bot.add_command(get_price)
+    bot.add_command(get_current_price)

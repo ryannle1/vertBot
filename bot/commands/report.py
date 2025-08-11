@@ -108,3 +108,9 @@ async def report(ctx):
 
         await ctx.channel.typing()
         await ctx.bot.loop.run_in_executor(None, lambda: None)  # Small async pause to avoid rate limits
+
+
+async def setup(bot):
+    """Add report commands to the bot."""
+    bot.add_command(set_report_channel)
+    bot.add_command(report)
