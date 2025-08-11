@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
 import pytz
 from api.market_data import is_market_open, fetch_closing_price, fetch_current_price
+from bot.utils.exceptions import MarketDataException
 
 class TestMarketData(unittest.TestCase):
     def setUp(self):
@@ -58,7 +59,7 @@ class TestMarketData(unittest.TestCase):
         mock_response.json.return_value = {"error": "Invalid symbol"}
         mock_get.return_value = mock_response
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(MarketDataException):
             fetch_closing_price("INVALID")
 
     @patch('api.market_data.requests.get')
@@ -93,6 +94,16 @@ class TestMarketData(unittest.TestCase):
         price2, date2 = fetch_current_price("AAPL")
         self.assertEqual(price2, 151.25)
         self.assertEqual(mock_get.call_count, 1)  # API should only be called once
+
+    @patch('api.market_data.requests.get')
+    def test_fetch_current_price_error(self, mock_get):
+        # Mock API error response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"error": "Invalid symbol"}
+        mock_get.return_value = mock_response
+
+        with self.assertRaises(MarketDataException):
+            fetch_current_price("INVALID")
 
 if __name__ == '__main__':
     unittest.main()
