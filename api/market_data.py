@@ -1,24 +1,38 @@
-# import yfinance as yf
+"""
+Market data API wrapper for fetching stock prices.
+Refactored to use centralized configuration and logging.
+"""
+
 import pytz
-import datetime
 from functools import lru_cache
 from datetime import datetime, timedelta
 import requests
-import os
 import time
-from dotenv import load_dotenv
-import logging
 
-load_dotenv()
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+from config.constants import (
+    FINNHUB_API_KEY, CACHE_TTL,
+    MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE,
+    MARKET_CLOSE_HOUR, MARKET_TIMEZONE
+)
+from bot.utils.logger import get_logger, log_api_call
+from bot.utils.exceptions import MarketDataException
+
+logger = get_logger(__name__)
 
 def is_market_open():
-    eastern = pytz.timezone('US/Eastern')
+    """Check if the US stock market is currently open."""
+    eastern = pytz.timezone(MARKET_TIMEZONE)
     now = datetime.now(eastern)
-    # Market hours: 9:30am to 4:00pm Eastern, Mon-Fri
-    return (now.weekday() < 5 and
-            ((now.hour > 9 or (now.hour == 9 and now.minute >= 30)) and
-             (now.hour < 16)))
+    
+    # Check if it's a weekday
+    if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
+        return False
+    
+    # Check if within market hours
+    market_open_time = now.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0)
+    market_close_time = now.replace(hour=MARKET_CLOSE_HOUR, minute=0, second=0)
+    
+    return market_open_time <= now < market_close_time
 
 @lru_cache(maxsize=100)
 def fetch_closing_price(symbol):
@@ -28,19 +42,27 @@ def fetch_closing_price(symbol):
     data = response.json()
     
     if "error" in data:
-        raise ValueError(f"Error fetching data: {data['error']}")
+        logger.error(f"Finnhub API error for {symbol}: {data['error']}")
+        log_api_call("finnhub", symbol, "error")
+        raise MarketDataException(symbol, data['error'])
     
     if "c" not in data or "t" not in data:
-        raise ValueError("No price data found.")
+        logger.error(f"Missing price data for {symbol}: {data}")
+        log_api_call("finnhub", symbol, "error")
+        raise MarketDataException(symbol, "No price data available")
     
     # Get the previous day's closing price
     last_close = float(data["pc"])  # Previous close
     last_date = datetime.fromtimestamp(data["t"]).strftime('%Y-%m-%d')
     
+    log_api_call("finnhub", symbol, "success")
+    logger.debug(f"Fetched closing price for {symbol}: ${last_close}")
+    
     return last_close, last_date
 
+# Price cache for current prices
 _price_cache = {}
-_cache_ttl = timedelta(minutes=5)
+_cache_ttl = timedelta(seconds=CACHE_TTL)
 
 def fetch_current_price(symbol):
     """Fetch the current market price with caching using Finnhub."""
@@ -55,15 +77,21 @@ def fetch_current_price(symbol):
     data = response.json()
     
     if "error" in data:
-        logging.error(f"Finnhub API Error for {symbol}: {data}")
-        raise ValueError(f"Error fetching data: {data['error']}")
+        logger.error(f"Finnhub API error for {symbol}: {data}")
+        log_api_call("finnhub", symbol, "error")
+        raise MarketDataException(symbol, data.get('error', 'Unknown error'))
     
     if "c" not in data or "t" not in data:
-        logging.error(f"Finnhub API Response missing data for {symbol}: {data}")
-        raise ValueError("No price data found.")
+        logger.error(f"Missing price data for {symbol}: {data}")
+        log_api_call("finnhub", symbol, "error")
+        raise MarketDataException(symbol, "No price data available")
     
     price = float(data["c"])  # Current price
     last_date = datetime.fromtimestamp(data["t"]).strftime('%Y-%m-%d')
     
     _price_cache[symbol] = (price, now)
+    
+    log_api_call("finnhub", symbol, "success")
+    logger.debug(f"Fetched current price for {symbol}: ${price}")
+    
     return price, last_date

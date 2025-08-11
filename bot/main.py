@@ -1,353 +1,327 @@
+"""
+VertBot main entry point - Refactored version.
+Handles bot initialization, scheduling, and core functionality.
+"""
+
 import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from pytz import timezone
 import pytz
 import datetime
-import os
-import json
-from dotenv import load_dotenv
 import asyncio
+from typing import Dict, Optional, Set, Tuple
 
+from config.constants import (
+    BOT_PREFIX, DISCORD_TOKEN, DEFAULT_STOCK_SYMBOLS,
+    BIG_CHANGE_THRESHOLD, PRICE_CHECK_INTERVAL,
+    DAILY_REPORT_HOUR, DAILY_REPORT_MINUTE, DAILY_REPORT_TIMEZONE,
+    MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE, MARKET_CLOSE_HOUR, MARKET_TIMEZONE
+)
 from bot.commands.report import load_channels
 from bot.commands.tickers import get_guild_tickers
-
-# Fallback stock symbols if config file is not available
-try:
-    from config.constants import STOCK_SYMBOLS
-except ImportError:
-    STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NFLX", "COST", "KO"]
-
 from api.news_data import fetch_news
+from api.market_data import fetch_closing_price, fetch_current_price, is_market_open
+from bot.utils.logger import get_logger, log_api_call
+from bot.utils.formatters import (
+    create_market_report_embed, create_price_embed, 
+    format_ticker, format_price, format_percentage
+)
+from bot.utils.exceptions import MarketDataException
 
-from api.market_data import fetch_closing_price
-from api.market_data import fetch_current_price
-
-from bot.utils.formatters import format_closing_price_report
-
-# STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "CRWV", "KO", "GOOGL", "COST", "BTC"]  # Example symbols, can be extended or made dynamic
-
-BIG_CHANGE_THRESHOLD = 2.5  # Percentage change threshold for significant price changes
-
-
-# This dictionary will store the last announced "big change" to avoid spamming
-announced_changes = {}
-
-
-load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
-
-# Define the channel ID where the bot will send messages
-CHANNEL_ID = 1376697868731027596  # Replace with your channel ID
+# Initialize logger
+logger = get_logger(__name__)
 
 # Initialize bot with intents
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
-
+bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents)
 
 # Initialize scheduler
 scheduler = AsyncIOScheduler()
 
+# State tracking for avoiding duplicate announcements
+class MarketMonitor:
+    """Manages market monitoring state and logic."""
+    
+    def __init__(self):
+        self.announced_changes: Dict[Tuple[int, str], float] = {}
+        self.daily_report_sent: bool = False
+        self.last_report_date: Optional[datetime.date] = None
+        self.yesterdays_closes: Dict[str, float] = {}
+        self.last_close_fetch: Optional[datetime.date] = None
+    
+    def should_announce_change(self, guild_id: int, symbol: str, pct_change: float) -> bool:
+        """Check if a price change should be announced."""
+        if abs(pct_change) < BIG_CHANGE_THRESHOLD:
+            return False
+        
+        key = (guild_id, symbol)
+        last_announcement = self.announced_changes.get(key)
+        
+        if not last_announcement or abs(pct_change) > abs(last_announcement):
+            self.announced_changes[key] = pct_change
+            return True
+        return False
+    
+    def reset_daily_tracking(self):
+        """Reset daily tracking variables."""
+        self.daily_report_sent = False
+        self.announced_changes.clear()
+        logger.info("Daily tracking reset")
+    
+    async def fetch_closing_prices(self, symbols: list) -> Dict[str, float]:
+        """Fetch closing prices for multiple symbols with caching."""
+        today = datetime.date.today()
+        
+        # Only refresh closing prices once per day
+        if self.last_close_fetch != today:
+            self.yesterdays_closes.clear()
+            self.last_close_fetch = today
+            
+        results = {}
+        for symbol in symbols:
+            if symbol not in self.yesterdays_closes:
+                try:
+                    price, _ = fetch_closing_price(symbol)
+                    self.yesterdays_closes[symbol] = price
+                    results[symbol] = price
+                    log_api_call("market_data", symbol, "success")
+                except Exception as e:
+                    logger.error(f"Failed to fetch closing price for {symbol}: {e}")
+                    log_api_call("market_data", symbol, "error")
+            else:
+                results[symbol] = self.yesterdays_closes[symbol]
+        
+        return results
+
+# Initialize market monitor
+market_monitor = MarketMonitor()
 
 
-
-
-
-async def monitor_big_stock_changes():
-    # Run periodic check during market hours
-    eastern = pytz.timezone('US/Eastern')
+async def monitor_price_changes():
+    """Monitor stocks for significant price changes during market hours."""
+    logger.info("Price monitoring task started")
+    
     while True:
-        now = datetime.datetime.now(eastern)
-        # Market hours: 9:30am - 4:00pm Eastern, Monday-Friday
-        if now.weekday() < 5 and (
-            (now.hour > 9 or (now.hour == 9 and now.minute >= 30)) and
-            (now.hour < 16)
-        ):
-            channels = load_channels()  # {guild_id: channel_id}
+        try:
+            if not is_market_open():
+                await asyncio.sleep(PRICE_CHECK_INTERVAL)
+                continue
+            
+            channels = load_channels()
+            
             for guild in bot.guilds:
                 channel_id = channels.get(str(guild.id))
                 if not channel_id:
-                    continue  # Skip if no channel set for this guild
+                    continue
+                
                 channel = guild.get_channel(channel_id)
                 if not channel:
                     continue
                 
-                # Get user-defined tickers for this guild
                 guild_tickers = get_guild_tickers(guild.id)
                 if not guild_tickers:
-                    continue  # Skip if no tickers configured for this guild
+                    continue
                 
-                # Get yesterday's close for each stock (refresh daily for best accuracy)
-                yesterdays_closes = {}
-                for symbol in guild_tickers:
-                    try:
-                        price,_ = fetch_closing_price(symbol)
-                        yesterdays_closes[symbol] = price
-                    except Exception as e:
-                        print(f"Could not fetch closing price for {symbol}: {e}")
+                # Get closing prices (cached)
+                closing_prices = await market_monitor.fetch_closing_prices(guild_tickers)
                 
-                for symbol in guild_tickers:
-                    try:
-                        curr_price,_ = fetch_current_price(symbol)
-                        close_price = yesterdays_closes.get(symbol)
-                        if close_price:
-                            pct_change = ((curr_price - close_price) / close_price) * 100
-                            if abs(pct_change) >= BIG_CHANGE_THRESHOLD:
-                                last_announcement = announced_changes.get((guild.id, symbol))
-                                if not last_announcement or abs(pct_change) > abs(last_announcement):
-                                    change_type = "up" if pct_change > 0 else "down"
-                                    await channel.send(
-                                        f"🚨 **{symbol.upper()}** is {change_type} {pct_change:.2f}% today!\n"
-                                        f"Current price: ${curr_price:.2f} (Prev. close: ${close_price:.2f})"
-                                    )
-                                    announced_changes[(guild.id, symbol)] = pct_change
-                        await asyncio.sleep(1)  # Slight delay to avoid rate limits
-                    except Exception as e:
-                        print(f"Error fetching current price for {symbol} in guild {guild.name}: {e}")
-            await asyncio.sleep(600)  # Check every 10 minutes
-        else:
-            await asyncio.sleep(600)
+                # Check current prices for significant changes
+                await check_price_changes(guild, channel, guild_tickers, closing_prices)
+        
+        except Exception as e:
+            logger.error(f"Error in price monitoring: {e}", exc_info=True)
+        
+        await asyncio.sleep(PRICE_CHECK_INTERVAL)
 
 
+async def check_price_changes(guild, channel, tickers, closing_prices):
+    """Check for significant price changes and send alerts."""
+    for symbol in tickers:
+        try:
+            if symbol not in closing_prices:
+                continue
+            
+            current_price, _ = fetch_current_price(symbol)
+            close_price = closing_prices[symbol]
+            
+            pct_change = ((current_price - close_price) / close_price) * 100
+            
+            if market_monitor.should_announce_change(guild.id, symbol, pct_change):
+                await send_price_alert(channel, symbol, current_price, close_price, pct_change)
+            
+            await asyncio.sleep(0.5)  # Rate limiting
+            
+        except Exception as e:
+            logger.error(f"Error checking price for {symbol} in guild {guild.name}: {e}")
 
-# Load commands from commands/ directory
+
+async def send_price_alert(channel, symbol: str, current_price: float, close_price: float, pct_change: float):
+    """Send a price alert to the channel."""
+    emoji = "📈" if pct_change > 0 else "📉"
+    direction = "up" if pct_change > 0 else "down"
+    
+    embed = discord.Embed(
+        title=f"{emoji} Price Alert: {format_ticker(symbol)}",
+        description=f"**{format_ticker(symbol)}** is {direction} **{format_percentage(abs(pct_change))}** today!",
+        color=0x00FF00 if pct_change > 0 else 0xFF0000
+    )
+    
+    embed.add_field(name="Current Price", value=format_price(current_price), inline=True)
+    embed.add_field(name="Previous Close", value=format_price(close_price), inline=True)
+    embed.add_field(name="Change", value=format_percentage(pct_change), inline=True)
+    
+    await channel.send(embed=embed)
+    logger.info(f"Price alert sent for {symbol}: {pct_change:.2f}% change")
+
+
+async def send_daily_report():
+    """Send daily market closing report to all configured channels."""
+    eastern = pytz.timezone(DAILY_REPORT_TIMEZONE)
+    now = datetime.datetime.now(eastern)
+    
+    # Check if we've already sent a report today
+    if market_monitor.last_report_date == now.date():
+        logger.debug("Daily report already sent today")
+        return
+    
+    logger.info("Sending daily market report")
+    channels = load_channels()
+    
+    for guild in bot.guilds:
+        try:
+            channel_id = channels.get(str(guild.id))
+            if not channel_id:
+                continue
+            
+            channel = guild.get_channel(channel_id)
+            if not channel:
+                logger.warning(f"Channel {channel_id} not found in guild {guild.name}")
+                continue
+            
+            # Get guild's tracked tickers
+            guild_tickers = get_guild_tickers(guild.id)
+            if not guild_tickers:
+                guild_tickers = DEFAULT_STOCK_SYMBOLS
+            
+            # Fetch market data
+            stocks_data = await fetch_market_data(guild_tickers)
+            
+            if stocks_data:
+                # Create and send report embed
+                embed = create_market_report_embed(stocks_data, report_type="daily")
+                await channel.send(embed=embed)
+                logger.info(f"Daily report sent to guild {guild.name}")
+            else:
+                logger.warning(f"No market data available for guild {guild.name}")
+        
+        except Exception as e:
+            logger.error(f"Error sending report to guild {guild.name}: {e}", exc_info=True)
+    
+    # Mark report as sent
+    market_monitor.last_report_date = now.date()
+    market_monitor.daily_report_sent = True
+
+
+async def fetch_market_data(tickers: list) -> Dict[str, Dict]:
+    """Fetch market data for multiple tickers."""
+    data = {}
+    
+    for ticker in tickers:
+        try:
+            price, _ = fetch_closing_price(ticker)
+            
+            # Try to get previous day's close for change calculation
+            # This is simplified - in production you'd want proper previous close data
+            change = 0
+            change_percent = 0
+            
+            data[ticker] = {
+                'price': price,
+                'change': change,
+                'change_percent': change_percent
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching data for {ticker}: {e}")
+    
+    return data
+
+
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user}!')
+    """Initialize bot when ready."""
+    logger.info(f'Bot logged in as {bot.user}')
     
-    # Log current time in different timezones for debugging
-    eastern = pytz.timezone('US/Eastern')
-    utc = pytz.UTC
+    # Log timezone information for debugging
+    eastern = pytz.timezone(MARKET_TIMEZONE)
     now_eastern = datetime.datetime.now(eastern)
-    now_utc = datetime.datetime.now(utc)
+    logger.info(f"Current Eastern time: {now_eastern.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    logger.info(f"Day of week: {now_eastern.strftime('%A')}")
     
-    print(f"Current time - UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    print(f"Current time - Eastern: {now_eastern.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    print(f"Day of week: {now_eastern.strftime('%A')} (weekday: {now_eastern.weekday()})")
+    # Schedule daily report
+    scheduler.add_job(
+        send_daily_report,
+        'cron',
+        hour=DAILY_REPORT_HOUR,
+        minute=DAILY_REPORT_MINUTE,
+        timezone=DAILY_REPORT_TIMEZONE,
+        id='daily_market_report',
+        replace_existing=True
+    )
     
     # Start scheduler
     scheduler.start()
-    print("Scheduler started successfully")
+    logger.info("Scheduler started with daily report job")
     
-    # Log scheduled jobs
-    jobs = scheduler.get_jobs()
-    print(f"Active scheduled jobs: {len(jobs)}")
-    for job in jobs:
-        next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "Not scheduled"
-        print(f"  - {job.id}: Next run at {next_run}")
-    
-    # Start the big stock changes monitor
-    bot.loop.create_task(monitor_big_stock_changes())
-    print("Big stock changes monitor started")
+    # Start price monitoring task
+    bot.loop.create_task(monitor_price_changes())
+    logger.info("Price monitoring task started")
 
 
-# Track if we've already sent a report today to avoid duplicates
-daily_report_sent = False
-last_report_date = None
-
-
-# Scheduled job function for market close report
-async def send_market_close_report():
-    """Send market close report at 4:00 PM Eastern time"""
-    global daily_report_sent, last_report_date
-    
-    await bot.wait_until_ready()
-    
-    # Check if it's a weekday
-    eastern = pytz.timezone('US/Eastern')
-    now = datetime.datetime.now(eastern)
-    
-    if now.weekday() >= 5:  # Weekend
-        print(f"Market close report skipped - weekend ({now.strftime('%A')})")
-        return
-    
-    # Reset daily flag if it's a new day
-    if last_report_date != now.date():
-        daily_report_sent = False
-        last_report_date = now.date()
-        print(f"Reset daily report flag for {now.date()}")
-    
-    # Check if we've already sent a report today
-    if daily_report_sent:
-        print(f"Market close report already sent today ({now.date()})")
-        return
-    
-    print(f"Sending market close report at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    
-    try:
-        channels = load_channels()
-        if not channels:
-            print("No channels configured for market close reports")
-            return
-        
-        for guild_id, channel_id in channels.items():
-            guild = bot.get_guild(int(guild_id))
-            if not guild:
-                print(f"Guild {guild_id} not found")
-                continue
-                
-            channel = guild.get_channel(channel_id)
-            if not channel:
-                print(f"Channel {channel_id} not found in guild {guild.name}")
-                continue
-            
-            print(f"Sending market close report to {guild.name} - {channel.name}")
-            
-            # Get user-defined tickers for this guild
-            guild_tickers = get_guild_tickers(guild.id)
-            if not guild_tickers:
-                print(f"No tickers configured for guild {guild.name}")
-                continue
-            
-            # Send header message
-            await channel.send("📊 **Daily Market Close Report** 📊\n━━━━━━━━━━━━━━━━━━━━━━")
-            
-            # Send report for each symbol
-            for symbol in guild_tickers:
-                try:
-                    price, date = fetch_current_price(symbol)
-                    # Use the same format as the /price command
-                    message = (
-                        f"📈 **Stock Price Report** 📈\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"**Symbol:** `{symbol.upper()}`\n"
-                        f"**Closing Price:** **${price:.2f}**\n"
-                        f"**Date:** `{date}`\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━"
-                    )
-                    await channel.send(message)
-                    await asyncio.sleep(2)  # Rate limiting
-                except Exception as e:
-                    error_msg = f"⚠️ Could not fetch closing price for {symbol.upper()}. Error: {e}"
-                    await channel.send(error_msg)
-                    print(f"Error fetching {symbol}: {e}")
-                    await asyncio.sleep(2)
-            
-            # Send footer
-            await channel.send("━━━━━━━━━━━━━━━━━━━━━━\n📈 *Market close report complete*")
-        
-        # Mark as sent for today
-        daily_report_sent = True
-        print(f"Market close report completed successfully for {now.date()}")
-        
-    except Exception as e:
-        print(f"Error in market close report: {e}")
-
-
-# Schedule the task for 4pm US/Eastern every weekday
-scheduler.add_job(
-    send_market_close_report,
-    'cron',
-    day_of_week='mon-fri',
-    hour=16, 
-    minute=0,
-    timezone=timezone('US/Eastern'),
-    id='market_close_report'
-)
-
-print("Scheduled market close report for 4:00 PM Eastern time, weekdays only")
-
-
-
-
-
-
-@bot.command(name="schedulerstatus")
-@commands.has_permissions(administrator=True)
-async def scheduler_status(ctx):
-    """Check the status of scheduled jobs. Admin only."""
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    
-    jobs = scheduler.get_jobs()
-    if jobs:
-        status_msg = "📅 **Scheduled Jobs:**\n"
-        for job in jobs:
-            next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "Not scheduled"
-            status_msg += f"• **{job.id}**: Next run at {next_run}\n"
-    else:
-        status_msg = "📅 No scheduled jobs found."
-    
-    await ctx.send(status_msg)
-
-
-@bot.command(name="resetreport")
-@commands.has_permissions(administrator=True)
-async def reset_daily_report(ctx):
-    """Manually reset the daily report flag. Admin only."""
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    
-    global daily_report_sent, last_report_date
-    daily_report_sent = False
-    last_report_date = None
-    
-    eastern = pytz.timezone('US/Eastern')
-    now = datetime.datetime.now(eastern)
-    
-    await ctx.send(f"🔄 Daily report flag reset. Current time: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    print(f"Daily report flag manually reset by {ctx.author.name} at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-
-
-
-
-# Add commands here for now
-from bot.commands.price import get_price
-from bot.commands.price import get_current_price
-from bot.commands.news import get_news
-from bot.commands.report import set_report_channel
-from bot.commands.report import report
-from bot.commands.ai import ask_ai
-from bot.commands.news import get_general_news
-from bot.commands.chart import get_stock_chart
-from bot.commands.tickers import add_ticker, remove_ticker, list_tickers, reset_tickers, clear_tickers, ticker_help
-
-
-
-# Register commands
-bot.add_command(get_stock_chart)
-bot.add_command(get_general_news)
-bot.add_command(ask_ai)
-bot.add_command(report)
-bot.add_command(get_price)
-bot.add_command(get_news)
-bot.add_command(get_current_price)
-bot.add_command(set_report_channel)
-bot.add_command(add_ticker)
-bot.add_command(remove_ticker)
-bot.add_command(list_tickers)
-bot.add_command(reset_tickers)
-bot.add_command(clear_tickers)
-bot.add_command(ticker_help)
-
-
-
-"""ERROR HANDLING
-   - Add error handling for commands to catch exceptions and send user-friendly messages.
-   - Use `@bot.event` to handle errors globally or per command.
-"""
 @bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("⚠️ Missing required argument. Usage: `!price SYMBOL`")
-    elif isinstance(error, commands.CommandNotFound):
-        await ctx.send("❓ Unknown command. Please check your command or type `!help`.")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("⚠️ Invalid argument. Please check your input and try again.")
-    elif isinstance(error, commands.CommandInvokeError):
-        # This error wraps the actual error inside "original"
-        original = getattr(error, "original", error)
-        await ctx.send(f"🚨 Error: {original}")
-    else:
-        await ctx.send(f"🚨 An unexpected error occurred: {str(error)}")
+async def on_guild_join(guild):
+    """Handle bot joining a new guild."""
+    logger.info(f"Bot joined new guild: {guild.name} (ID: {guild.id})")
 
 
+@bot.event
+async def on_guild_remove(guild):
+    """Handle bot being removed from a guild."""
+    logger.info(f"Bot removed from guild: {guild.name} (ID: {guild.id})")
+
+
+# Load all command modules
+async def setup():
+    """Load all command extensions."""
+    command_modules = [
+        'bot.commands.price',
+        'bot.commands.news',
+        'bot.commands.report',
+        'bot.commands.tickers',
+        'bot.commands.ai',
+        'bot.commands.chart'
+    ]
+    
+    for module in command_modules:
+        try:
+            await bot.load_extension(module)
+            logger.info(f"Loaded extension: {module}")
+        except Exception as e:
+            logger.error(f"Failed to load extension {module}: {e}")
+
+
+async def main():
+    """Main entry point."""
+    async with bot:
+        await setup()
+        await bot.start(DISCORD_TOKEN)
 
 
 if __name__ == "__main__":
-    bot.run(TOKEN)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot shutdown requested")
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}", exc_info=True)

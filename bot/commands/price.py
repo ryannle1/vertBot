@@ -1,57 +1,76 @@
+"""
+Price commands for fetching stock prices.
+Refactored to use centralized utilities and consistent error handling.
+"""
+
 from discord.ext import commands
-from api.market_data import fetch_closing_price, fetch_current_price, is_market_open
+from api.market_data import fetch_closing_price, fetch_current_price
+from bot.utils.decorators import delete_command_message, handle_errors, market_hours_only
+from bot.utils.formatters import create_price_embed, format_ticker
+from bot.utils.logger import get_logger, log_command
+from bot.utils.exceptions import MarketDataException, InvalidTickerException
+
+logger = get_logger(__name__)
+
 
 @commands.command(name='price')
+@delete_command_message
+@handle_errors(error_message="Failed to fetch stock price")
 async def get_price(ctx, symbol: str):
-    """Returns the latest closing price for the given stock symbol, with a distinctive message."""
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    symbol = symbol.upper()
+    """Returns the latest closing price for the given stock symbol."""
+    log_command("price", ctx.author.name, ctx.guild.name if ctx.guild else "DM", symbol)
+    
+    symbol = format_ticker(symbol)
+    
     try:
         price, date = fetch_closing_price(symbol)
-        message = (
-            f"📈 **Stock Price Report** 📈\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**Symbol:** `{symbol}`\n"
-            f"**Last Close:** **${price:.2f}**\n"
-            f"**Date:** `{date}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━"
+        
+        # Create embed with price information
+        embed = create_price_embed(
+            ticker=symbol,
+            price=price,
+            is_live=False
         )
-        await ctx.send(message)
+        embed.set_footer(text=f"Closing price as of {date}")
+        
+        await ctx.send(embed=embed)
+        logger.info(f"Price fetched successfully for {symbol}: ${price}")
+        
+    except ValueError as e:
+        # Invalid ticker symbol
+        raise InvalidTickerException(symbol)
     except Exception as e:
-        await ctx.send(
-            f"❌ Could not fetch closing price for `{symbol}`.\n"
-            f"Error: `{e}`"
-        )
+        logger.error(f"Error fetching price for {symbol}: {e}")
+        raise MarketDataException(symbol, str(e))
+
 
 @commands.command(name='current')
+@delete_command_message
+@market_hours_only
+@handle_errors(error_message="Failed to fetch current price")
 async def get_current_price(ctx, symbol: str):
-    """Returns the current price for the given stock symbol, with a distinctive message."""
+    """Returns the current live price for the given stock symbol."""
+    log_command("current", ctx.author.name, ctx.guild.name if ctx.guild else "DM", symbol)
+    
+    symbol = format_ticker(symbol)
+    
     try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-    symbol = symbol.upper()
-    if not is_market_open():
-        await ctx.send(
-            "⏰ The US stock market is currently closed. Please try again during open hours (9:30am–4:00pm Eastern, Mon–Fri)."
+        price, timestamp = fetch_current_price(symbol)
+        
+        # Create embed with live price information
+        embed = create_price_embed(
+            ticker=symbol,
+            price=price,
+            is_live=True
         )
-        return
-    try:
-        price, date = fetch_current_price(symbol)
-        message = (
-            f"💹 **Live Price Update** 💹\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**Symbol:** `{symbol}`\n"
-            f"**Current Price:** **${price:.2f}**\n"
-            f"**As of:** `{date}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━"
-        )
-        await ctx.send(message)
+        embed.set_footer(text=f"Live price as of {timestamp}")
+        
+        await ctx.send(embed=embed)
+        logger.info(f"Current price fetched successfully for {symbol}: ${price}")
+        
+    except ValueError as e:
+        # Invalid ticker symbol
+        raise InvalidTickerException(symbol)
     except Exception as e:
-        await ctx.send(
-            f"❌ Could not fetch current price for `{symbol}`.\n"
-            f"Error: `{e}`"
-        )
+        logger.error(f"Error fetching current price for {symbol}: {e}")
+        raise MarketDataException(symbol, str(e))

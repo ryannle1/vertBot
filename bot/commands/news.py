@@ -1,43 +1,61 @@
+"""
+News commands for fetching financial news.
+Refactored to use centralized utilities and consistent error handling.
+"""
+
 from discord.ext import commands
 from api.news_data import fetch_news, fetch_general_market_news
+from bot.utils.decorators import delete_command_message, handle_errors
+from bot.utils.formatters import create_news_embed, format_ticker
+from bot.utils.logger import get_logger, log_command
+from bot.utils.exceptions import NewsDataException, InvalidTickerException
+
+logger = get_logger(__name__)
+
 
 @commands.command(name='stocknews')
+@delete_command_message
+@handle_errors(error_message="Failed to fetch stock news")
 async def get_news(ctx, symbol: str):
     """Returns recent news headlines for the given stock symbol."""
-    try:
-        await ctx.message.delete()
-    except Exception as e:
-        # Silently ignore if can't delete (missing perms, already deleted, etc)
-        pass
-    symbol = symbol.upper()
+    log_command("stocknews", ctx.author.name, ctx.guild.name if ctx.guild else "DM", symbol)
+
+    symbol = format_ticker(symbol)
+
     try:
         articles = fetch_news(symbol)
-        if not articles:
-            await ctx.send(f"No news found for {symbol.upper()}.")
-            return
-        response = f"**Latest news for {symbol.upper()}:**\n"
-        for art in articles[:5]:  # Show top 5
-            response += f"- [{art['headline']}]({art['url']})\n"
-        await ctx.send(response)
+
+        # Create embed with news articles
+        embed = create_news_embed(symbol, articles)
+
+        await ctx.send(embed=embed)
+        logger.info(f"News fetched successfully for {symbol}: {len(articles)} articles")
+
+    except ValueError:
+        # Invalid ticker symbol
+        raise InvalidTickerException(symbol)
     except Exception as e:
-        await ctx.send(f"Could not fetch news for {symbol.upper()}. Error: {e}")
+        logger.error(f"Error fetching news for {symbol}: {e}")
+        raise NewsDataException(symbol, str(e))
+
 
 @commands.command(name='news')
+@delete_command_message
+@handle_errors(error_message="Failed to fetch market news")
 async def get_general_news(ctx):
     """Returns recent general market news headlines."""
-    try:
-        await ctx.message.delete()
-    except Exception as e:
-        # Silently ignore if can't delete (missing perms, already deleted, etc)
-        pass
+    log_command("news", ctx.author.name, ctx.guild.name if ctx.guild else "DM", "general")
+
     try:
         articles = fetch_general_market_news()
-        if not articles:
-            await ctx.send("No general market news found.")
-            return
-        response = "**Latest general market news:**\n"
-        for art in articles[:5]:  # Show top 5
-            response += f"- [{art['headline']}]({art['url']})\n"
-        await ctx.send(response)
+
+        # Create embed with general market news
+        embed = create_news_embed("Market", articles)
+        embed.title = "📰 Latest Market News"
+
+        await ctx.send(embed=embed)
+        logger.info(f"General market news fetched successfully: {len(articles)} articles")
+
     except Exception as e:
-        await ctx.send(f"Could not fetch general market news. Error: {e}")
+        logger.error(f"Error fetching general market news: {e}")
+        raise NewsDataException("Market", str(e))
