@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from api.market_data import fetch_closing_price, fetch_current_price
 from api.news_data import fetch_news
-from config.constants import DEFAULT_STOCK_SYMBOLS
+# No default stock symbols - users must configure their own
 from bot.commands.tickers import get_guild_tickers
 import asyncio
 

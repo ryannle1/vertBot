@@ -10,7 +10,10 @@ import sys
 from typing import Optional
 from pathlib import Path
 
-from config.constants import LOG_LEVEL, LOG_FORMAT, LOG_DATE_FORMAT
+# Logging configuration constants
+LOG_LEVEL = "INFO"
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 class ColoredFormatter(logging.Formatter):

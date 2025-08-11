@@ -34,7 +34,18 @@ except ImportError:
     
     discord = MockDiscord()
 
-from config.constants import EmbedColors, MARKET_TIMEZONE
+# Embed colors and timezone constants
+class EmbedColors:
+    """Default embed colors for Discord messages."""
+    SUCCESS = 0x00FF00  # Green
+    ERROR = 0xFF0000    # Red
+    WARNING = 0xFFFF00  # Yellow
+    INFO = 0x0000FF     # Blue
+    PRICE_UP = 0x00FF00 # Green for price increase
+    PRICE_DOWN = 0xFF0000 # Red for price decrease
+    PRICE_NEUTRAL = 0x808080 # Gray for no change
+
+MARKET_TIMEZONE = "US/Eastern"
 
 
 def format_price(price: float, currency: str = "$") -> str:

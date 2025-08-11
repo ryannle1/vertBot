@@ -108,7 +108,19 @@ async def list_tickers(ctx):
     current_tickers = get_guild_tickers(guild_id)
     
     if not current_tickers:
-        await ctx.send("📋 **Your Monitoring List**\n━━━━━━━━━━━━━━━━━━━━━━\nNo tickers configured. Use `!addticker SYMBOL` to add some!")
+        await ctx.send(
+            "📋 **Your Monitoring List**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "No tickers configured yet!\n\n"
+            "**To get started:**\n"
+            "• Use `!addticker AAPL` to add Apple\n"
+            "• Use `!addticker TSLA` to add Tesla\n"
+            "• Use `!addticker GOOGL` to add Google\n\n"
+            "**Then:**\n"
+            "• Use `!setreportchannel` to set up daily reports\n"
+            "• Use `!price SYMBOL` to check prices\n"
+            "• Use `!tickerhelp` for more commands"
+        )
         return
     
     ticker_list = "\n".join([f"• `{ticker}`" for ticker in sorted(current_tickers)])
@@ -126,26 +138,21 @@ async def list_tickers(ctx):
 @commands.has_permissions(administrator=True)
 async def reset_tickers(ctx):
     """
-    Reset your monitoring list to the default tickers.
+    Clear your monitoring list and start fresh.
     """
     try:
         await ctx.message.delete()
     except Exception:
         pass
     
-    # Fallback stock symbols if config file is not available
-    try:
-        from config.constants import DEFAULT_STOCK_SYMBOLS
-    except ImportError:
-        STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NFLX", "COST", "KO"]
-    
     guild_id = str(ctx.guild.id)
     
-    set_guild_tickers(guild_id, STOCK_SYMBOLS.copy())
+    # Clear all tickers - users must add their own
+    set_guild_tickers(guild_id, [])
     
     await ctx.send(
-        f"✅ Reset to default tickers!\n"
-        f"Your monitoring list now contains: {', '.join([f'`{ticker}`' for ticker in STOCK_SYMBOLS])}"
+        f"✅ Cleared all tickers!\n"
+        f"Use `!addticker SYMBOL` to add stocks to monitor."
     )
 
 @commands.command(name="cleartickers")
@@ -180,7 +187,7 @@ async def ticker_help(ctx):
         "**!addticker SYMBOL** - Add a stock to monitor\n"
         "**!removeticker SYMBOL** - Remove a stock from monitoring\n"
         "**!listtickers** - Show all monitored stocks\n"
-        "**!resettickers** - Reset to default stocks\n"
+        "**!resettickers** - Clear all stocks and start fresh\n"
         "**!cleartickers** - Clear all stocks\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "**Examples:**\n"
@@ -188,7 +195,8 @@ async def ticker_help(ctx):
         "• `!addticker TSLA` - Add Tesla\n"
         "• `!removeticker KO` - Remove Coca-Cola\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "💡 **Note:** Only administrators can add/remove tickers."
+        "💡 **Note:** Only administrators can add/remove tickers.\n"
+        "💡 **Tip:** Start by adding a few stocks you want to monitor!"
     )
     
     await ctx.send(help_message) 

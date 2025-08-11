@@ -11,12 +11,18 @@ import datetime
 import asyncio
 from typing import Dict, Optional, Set, Tuple
 
-from config.constants import (
-    BOT_PREFIX, DISCORD_TOKEN, DEFAULT_STOCK_SYMBOLS,
-    BIG_CHANGE_THRESHOLD, PRICE_CHECK_INTERVAL,
-    DAILY_REPORT_HOUR, DAILY_REPORT_MINUTE, DAILY_REPORT_TIMEZONE,
-    MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE, MARKET_CLOSE_HOUR, MARKET_TIMEZONE
-)
+# Bot configuration constants
+BOT_PREFIX = "!"
+BIG_CHANGE_THRESHOLD = 2.5  # Percentage change threshold
+PRICE_CHECK_INTERVAL = 300  # seconds (5 minutes)
+DAILY_REPORT_HOUR = 16  # 4 PM market close
+DAILY_REPORT_MINUTE = 0
+DAILY_REPORT_TIMEZONE = "US/Eastern"
+MARKET_OPEN_HOUR = 9
+MARKET_OPEN_MINUTE = 30
+MARKET_CLOSE_HOUR = 16
+MARKET_TIMEZONE = "US/Eastern"
+# No default stock symbols - users must configure their own
 from bot.commands.report import load_channels
 from bot.commands.tickers import get_guild_tickers
 from api.news_data import fetch_news
@@ -27,6 +33,12 @@ from bot.utils.formatters import (
     format_ticker, format_price, format_percentage
 )
 from bot.utils.exceptions import MarketDataException
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -202,7 +214,8 @@ async def send_daily_report():
             # Get guild's tracked tickers
             guild_tickers = get_guild_tickers(guild.id)
             if not guild_tickers:
-                guild_tickers = DEFAULT_STOCK_SYMBOLS
+                logger.info(f"No tickers configured for guild {guild.name} - skipping daily report")
+                continue
             
             # Fetch market data
             stocks_data = await fetch_market_data(guild_tickers)
@@ -283,6 +296,53 @@ async def on_ready():
 async def on_guild_join(guild):
     """Handle bot joining a new guild."""
     logger.info(f"Bot joined new guild: {guild.name} (ID: {guild.id})")
+    
+    # Try to send a welcome message to the first available text channel
+    try:
+        # Find the first text channel where the bot can send messages
+        welcome_channel = None
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                welcome_channel = channel
+                break
+        
+        if welcome_channel:
+            welcome_embed = discord.Embed(
+                title="🎉 Welcome to VertBot!",
+                description="Your personal stock market monitoring assistant",
+                color=0x00FF00
+            )
+            
+            welcome_embed.add_field(
+                name="🚀 Getting Started",
+                value=(
+                    "**1.** Set up your report channel: `!setreportchannel`\n"
+                    "**2.** Add stocks to monitor: `!addticker AAPL`\n"
+                    "**3.** View your list: `!listtickers`\n"
+                    "**4.** Get help: `!tickerhelp`"
+                ),
+                inline=False
+            )
+            
+            welcome_embed.add_field(
+                name="📊 Available Commands",
+                value=(
+                    "• `!price SYMBOL` - Get stock price\n"
+                    "• `!current SYMBOL` - Get live price\n"
+                    "• `!news SYMBOL` - Get stock news\n"
+                    "• `!chart SYMBOL` - Get price chart\n"
+                    "• `!ask QUESTION` - Ask AI about stocks"
+                ),
+                inline=False
+            )
+            
+            welcome_embed.set_footer(text="Configure your tickers to start receiving daily reports!")
+            
+            await welcome_channel.send(embed=welcome_embed)
+            logger.info(f"Welcome message sent to {guild.name}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send welcome message to {guild.name}: {e}")
 
 
 @bot.event

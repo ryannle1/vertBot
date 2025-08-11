@@ -9,13 +9,21 @@ from datetime import datetime, timedelta
 import requests
 import time
 
-from config.constants import (
-    FINNHUB_API_KEY, CACHE_TTL,
-    MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE,
-    MARKET_CLOSE_HOUR, MARKET_TIMEZONE
-)
+import os
+from dotenv import load_dotenv
 from bot.utils.logger import get_logger, log_api_call
 from bot.utils.exceptions import MarketDataException
+
+# Load environment variables
+load_dotenv()
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+CACHE_TTL = 60  # seconds for market data cache
+
+# Market hours constants
+MARKET_OPEN_HOUR = 9
+MARKET_OPEN_MINUTE = 30
+MARKET_CLOSE_HOUR = 16
+MARKET_TIMEZONE = "US/Eastern"
 
 logger = get_logger(__name__)
 
