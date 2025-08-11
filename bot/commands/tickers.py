@@ -135,7 +135,7 @@ async def reset_tickers(ctx):
     
     # Fallback stock symbols if config file is not available
     try:
-        from config.constants import STOCK_SYMBOLS
+        from config.constants import DEFAULT_STOCK_SYMBOLS
     except ImportError:
         STOCK_SYMBOLS = ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NFLX", "COST", "KO"]
     
