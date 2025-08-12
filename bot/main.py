@@ -61,6 +61,10 @@ class MarketMonitor:
         self.last_report_date: Optional[datetime.date] = None
         self.yesterdays_closes: Dict[str, float] = {}
         self.last_close_fetch: Optional[datetime.date] = None
+        self.price_monitoring_task: Optional[asyncio.Task] = None
+        self.last_price_check: Optional[datetime.datetime] = None
+        self.last_daily_report: Optional[datetime.datetime] = None
+        self.scheduler_watchdog_task: Optional[asyncio.Task] = None
     
     def should_announce_change(self, guild_id: int, symbol: str, pct_change: float) -> bool:
         """Check if a price change should be announced."""
@@ -80,6 +84,32 @@ class MarketMonitor:
         self.daily_report_sent = False
         self.announced_changes.clear()
         logger.info("Daily tracking reset")
+    
+    def update_price_check_time(self):
+        """Update the last price check timestamp."""
+        self.last_price_check = datetime.datetime.now()
+    
+    def update_daily_report_time(self):
+        """Update the last daily report timestamp."""
+        self.last_daily_report = datetime.datetime.now()
+    
+    def is_price_monitoring_active(self) -> bool:
+        """Check if price monitoring is actively running."""
+        if not self.last_price_check:
+            return False
+        
+        # Check if price monitoring has been active in the last 10 minutes
+        time_since_last_check = datetime.datetime.now() - self.last_price_check
+        return time_since_last_check.total_seconds() < 600  # 10 minutes
+    
+    def is_daily_report_active(self) -> bool:
+        """Check if daily report is actively running."""
+        if not self.last_daily_report:
+            return False
+        
+        # Check if daily report has been sent in the last 24 hours
+        time_since_last_report = datetime.datetime.now() - self.last_daily_report
+        return time_since_last_report.total_seconds() < 86400  # 24 hours
     
     async def fetch_closing_prices(self, symbols: list) -> Dict[str, float]:
         """Fetch closing prices for multiple symbols with caching."""
@@ -105,6 +135,56 @@ class MarketMonitor:
                 results[symbol] = self.yesterdays_closes[symbol]
         
         return results
+    
+    async def restart_scheduler_if_needed(self):
+        """Restart the scheduler if it's not running."""
+        try:
+            if not scheduler.running:
+                logger.warning("Scheduler is not running, attempting to restart...")
+                
+                # Stop any existing scheduler
+                try:
+                    scheduler.shutdown()
+                except:
+                    pass
+                
+                # Schedule daily report
+                scheduler.add_job(
+                    send_daily_report,
+                    'cron',
+                    hour=DAILY_REPORT_HOUR,
+                    minute=DAILY_REPORT_MINUTE,
+                    timezone=DAILY_REPORT_TIMEZONE,
+                    id='daily_market_report',
+                    replace_existing=True,
+                    misfire_grace_time=3600
+                )
+                
+                # Schedule daily reset at midnight
+                scheduler.add_job(
+                    self.reset_daily_tracking,
+                    'cron',
+                    hour=0,
+                    minute=0,
+                    timezone=DAILY_REPORT_TIMEZONE,
+                    id='daily_reset',
+                    replace_existing=True,
+                    misfire_grace_time=3600
+                )
+                
+                # Start scheduler
+                scheduler.start()
+                logger.info("✅ Scheduler restarted successfully")
+                
+                # Verify it's running
+                if scheduler.running:
+                    jobs = scheduler.get_jobs()
+                    logger.info(f"Scheduler running with {len(jobs)} jobs")
+                else:
+                    logger.error("❌ Scheduler failed to start after restart attempt")
+                    
+        except Exception as e:
+            logger.error(f"Failed to restart scheduler: {e}", exc_info=True)
 
 # Initialize market monitor
 market_monitor = MarketMonitor()
@@ -116,7 +196,11 @@ async def monitor_price_changes():
     
     while True:
         try:
+            # Update the last check time
+            market_monitor.update_price_check_time()
+            
             if not is_market_open():
+                logger.debug("Market is closed, waiting for next check")
                 await asyncio.sleep(PRICE_CHECK_INTERVAL)
                 continue
             
@@ -143,8 +227,31 @@ async def monitor_price_changes():
         
         except Exception as e:
             logger.error(f"Error in price monitoring: {e}", exc_info=True)
+            # Don't exit the loop, just wait and try again
+            await asyncio.sleep(PRICE_CHECK_INTERVAL)
+            continue
         
         await asyncio.sleep(PRICE_CHECK_INTERVAL)
+
+
+async def scheduler_watchdog():
+    """Periodically check if the scheduler is running and restart if needed."""
+    logger.info("Scheduler watchdog started")
+    
+    while True:
+        try:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            
+            # Check if scheduler is running
+            if not scheduler.running:
+                logger.warning("Scheduler watchdog detected scheduler is not running")
+                await market_monitor.restart_scheduler_if_needed()
+            else:
+                logger.debug("Scheduler watchdog: scheduler is running normally")
+                
+        except Exception as e:
+            logger.error(f"Error in scheduler watchdog: {e}", exc_info=True)
+            await asyncio.sleep(300)  # Wait before next check
 
 
 async def check_price_changes(guild, channel, tickers, closing_prices):
@@ -189,51 +296,59 @@ async def send_price_alert(channel, symbol: str, current_price: float, close_pri
 
 async def send_daily_report():
     """Send daily market closing report to all configured channels."""
-    eastern = pytz.timezone(DAILY_REPORT_TIMEZONE)
-    now = datetime.datetime.now(eastern)
-    
-    # Check if we've already sent a report today
-    if market_monitor.last_report_date == now.date():
-        logger.debug("Daily report already sent today")
-        return
-    
-    logger.info("Sending daily market report")
-    channels = load_channels()
-    
-    for guild in bot.guilds:
-        try:
-            channel_id = channels.get(str(guild.id))
-            if not channel_id:
-                continue
-            
-            channel = guild.get_channel(channel_id)
-            if not channel:
-                logger.warning(f"Channel {channel_id} not found in guild {guild.name}")
-                continue
-            
-            # Get guild's tracked tickers
-            guild_tickers = get_guild_tickers(guild.id)
-            if not guild_tickers:
-                logger.info(f"No tickers configured for guild {guild.name} - skipping daily report")
-                continue
-            
-            # Fetch market data
-            stocks_data = await fetch_market_data(guild_tickers)
-            
-            if stocks_data:
-                # Create and send report embed
-                embed = create_market_report_embed(stocks_data, report_type="daily")
-                await channel.send(embed=embed)
-                logger.info(f"Daily report sent to guild {guild.name}")
-            else:
-                logger.warning(f"No market data available for guild {guild.name}")
+    try:
+        eastern = pytz.timezone(DAILY_REPORT_TIMEZONE)
+        now = datetime.datetime.now(eastern)
         
-        except Exception as e:
-            logger.error(f"Error sending report to guild {guild.name}: {e}", exc_info=True)
-    
-    # Mark report as sent
-    market_monitor.last_report_date = now.date()
-    market_monitor.daily_report_sent = True
+        # Check if we've already sent a report today
+        if market_monitor.last_report_date == now.date():
+            logger.debug("Daily report already sent today")
+            return
+        
+        logger.info("Sending daily market report")
+        channels = load_channels()
+        
+        for guild in bot.guilds:
+            try:
+                channel_id = channels.get(str(guild.id))
+                if not channel_id:
+                    continue
+                
+                channel = guild.get_channel(channel_id)
+                if not channel:
+                    logger.warning(f"Channel {channel_id} not found in guild {guild.name}")
+                    continue
+                
+                # Get guild's tracked tickers
+                guild_tickers = get_guild_tickers(guild.id)
+                if not guild_tickers:
+                    logger.info(f"No tickers configured for guild {guild.name} - skipping daily report")
+                    continue
+                
+                # Fetch market data
+                stocks_data = await fetch_market_data(guild_tickers)
+                
+                if stocks_data:
+                    # Create and send report embed
+                    embed = create_market_report_embed(stocks_data, report_type="daily")
+                    await channel.send(embed=embed)
+                    logger.info(f"Daily report sent to guild {guild.name}")
+                else:
+                    logger.warning(f"No market data available for guild {guild.name}")
+            
+            except Exception as e:
+                logger.error(f"Error sending report to guild {guild.name}: {e}", exc_info=True)
+        
+        # Mark report as sent
+        market_monitor.last_report_date = now.date()
+        market_monitor.daily_report_sent = True
+        market_monitor.update_daily_report_time()
+        logger.info("Daily report completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Critical error in daily report: {e}", exc_info=True)
+        # Update the time even on error to prevent infinite retries
+        market_monitor.update_daily_report_time()
 
 
 async def fetch_market_data(tickers: list) -> Dict[str, Dict]:
@@ -297,24 +412,82 @@ async def on_ready():
     logger.info(f"Current Eastern time: {now_eastern.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     logger.info(f"Day of week: {now_eastern.strftime('%A')}")
     
-    # Schedule daily report
-    scheduler.add_job(
-        send_daily_report,
-        'cron',
-        hour=DAILY_REPORT_HOUR,
-        minute=DAILY_REPORT_MINUTE,
-        timezone=DAILY_REPORT_TIMEZONE,
-        id='daily_market_report',
-        replace_existing=True
-    )
+    # Initialize scheduler with error handling
+    try:
+        # Stop any existing scheduler
+        if scheduler.running:
+            scheduler.shutdown()
+            logger.info("Stopped existing scheduler")
+        
+        # Schedule daily report
+        scheduler.add_job(
+            send_daily_report,
+            'cron',
+            hour=DAILY_REPORT_HOUR,
+            minute=DAILY_REPORT_MINUTE,
+            timezone=DAILY_REPORT_TIMEZONE,
+            id='daily_market_report',
+            replace_existing=True,
+            misfire_grace_time=3600  # Allow 1 hour grace period
+        )
+        
+        # Schedule daily reset at midnight
+        scheduler.add_job(
+            market_monitor.reset_daily_tracking,
+            'cron',
+            hour=0,
+            minute=0,
+            timezone=DAILY_REPORT_TIMEZONE,
+            id='daily_reset',
+            replace_existing=True,
+            misfire_grace_time=3600
+        )
+        
+        # Start scheduler
+        scheduler.start()
+        logger.info("Scheduler started with daily report and reset jobs")
+        
+        # Verify scheduler is running
+        if scheduler.running:
+            logger.info("✅ Scheduler is running successfully")
+            # List all scheduled jobs
+            jobs = scheduler.get_jobs()
+            logger.info(f"Scheduled jobs: {len(jobs)}")
+            for job in jobs:
+                logger.info(f"  - {job.id}: {job.next_run_time}")
+        else:
+            logger.error("❌ Scheduler failed to start")
+            
+    except Exception as e:
+        logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
     
-    # Start scheduler
-    scheduler.start()
-    logger.info("Scheduler started with daily report job")
+    # Start price monitoring task with better management
+    try:
+        # Cancel any existing task
+        if market_monitor.price_monitoring_task and not market_monitor.price_monitoring_task.done():
+            market_monitor.price_monitoring_task.cancel()
+            logger.info("Cancelled existing price monitoring task")
+        
+        # Create new task
+        market_monitor.price_monitoring_task = bot.loop.create_task(monitor_price_changes())
+        logger.info("✅ Price monitoring task started")
+        
+    except Exception as e:
+        logger.error(f"Failed to start price monitoring task: {e}", exc_info=True)
     
-    # Start price monitoring task
-    bot.loop.create_task(monitor_price_changes())
-    logger.info("Price monitoring task started")
+    # Start scheduler watchdog task
+    try:
+        # Cancel any existing watchdog task
+        if market_monitor.scheduler_watchdog_task and not market_monitor.scheduler_watchdog_task.done():
+            market_monitor.scheduler_watchdog_task.cancel()
+            logger.info("Cancelled existing scheduler watchdog task")
+        
+        # Create new watchdog task
+        market_monitor.scheduler_watchdog_task = bot.loop.create_task(scheduler_watchdog())
+        logger.info("✅ Scheduler watchdog task started")
+        
+    except Exception as e:
+        logger.error(f"Failed to start scheduler watchdog task: {e}", exc_info=True)
 
 
 @bot.event
@@ -493,7 +666,9 @@ async def bot_help_command(ctx):
         value=(
             "• `!ping` - Test if bot is responding\n"
             "• `!bothelp` - Show this help message\n"
-            "• `!help` - Show Discord.py built-in help"
+            "• `!help` - Show Discord.py built-in help\n"
+            "• `!health` - Check bot health and task status\n"
+            "• `!restart` - Restart scheduler (Admin only)"
         ),
         inline=False
     )
@@ -502,6 +677,139 @@ async def bot_help_command(ctx):
     
     await ctx.send(embed=help_embed)
     logger.info(f"Bot help command executed by {ctx.author}")
+
+
+@bot.command(name="health")
+async def health_check(ctx):
+    """Check the health and status of the bot's scheduled tasks."""
+    try:
+        # Get current time in Eastern timezone
+        eastern = pytz.timezone(MARKET_TIMEZONE)
+        now_eastern = datetime.datetime.now(eastern)
+        
+        # Create health status embed
+        health_embed = discord.Embed(
+            title="🏥 VertBot Health Check",
+            description=f"Status as of {now_eastern.strftime('%Y-%m-%d %H:%M:%S %Z')}",
+            color=0x00FF00
+        )
+        
+        # Check scheduler status
+        scheduler_status = "✅ Running" if scheduler.running else "❌ Stopped"
+        health_embed.add_field(
+            name="📅 Scheduler Status",
+            value=scheduler_status,
+            inline=True
+        )
+        
+        # Check scheduled jobs
+        if scheduler.running:
+            jobs = scheduler.get_jobs()
+            job_info = f"**{len(jobs)} jobs scheduled**\n"
+            for job in jobs:
+                next_run = job.next_run_time
+                if next_run:
+                    next_run_eastern = next_run.astimezone(eastern)
+                    job_info += f"• {job.id}: {next_run_eastern.strftime('%H:%M:%S')}\n"
+                else:
+                    job_info += f"• {job.id}: No next run time\n"
+        else:
+            job_info = "No jobs scheduled (scheduler not running)"
+        
+        health_embed.add_field(
+            name="📋 Scheduled Jobs",
+            value=job_info,
+            inline=False
+        )
+        
+        # Check price monitoring status
+        price_monitoring_status = "✅ Active" if market_monitor.is_price_monitoring_active() else "❌ Inactive"
+        health_embed.add_field(
+            name="📊 Price Monitoring",
+            value=price_monitoring_status,
+            inline=True
+        )
+        
+        # Check daily report status
+        daily_report_status = "✅ Active" if market_monitor.is_daily_report_active() else "❌ Inactive"
+        health_embed.add_field(
+            name="📈 Daily Report",
+            value=daily_report_status,
+            inline=True
+        )
+        
+        # Add last activity times
+        if market_monitor.last_price_check:
+            last_price_check_eastern = market_monitor.last_price_check.astimezone(eastern)
+            health_embed.add_field(
+                name="🕒 Last Price Check",
+                value=last_price_check_eastern.strftime('%H:%M:%S'),
+                inline=True
+            )
+        
+        if market_monitor.last_daily_report:
+            last_report_eastern = market_monitor.last_daily_report.astimezone(eastern)
+            health_embed.add_field(
+                name="🕒 Last Daily Report",
+                value=last_report_eastern.strftime('%H:%M:%S'),
+                inline=True
+            )
+        
+        # Check market status
+        market_status = "🟢 Open" if is_market_open() else "🔴 Closed"
+        health_embed.add_field(
+            name="🏛️ Market Status",
+            value=market_status,
+            inline=True
+        )
+        
+        # Add overall health indicator
+        overall_health = "🟢 Healthy"
+        if not scheduler.running or not market_monitor.is_price_monitoring_active():
+            overall_health = "🟡 Warning"
+        if not scheduler.running and not market_monitor.is_price_monitoring_active():
+            overall_health = "🔴 Critical"
+        
+        health_embed.add_field(
+            name="🏥 Overall Health",
+            value=overall_health,
+            inline=False
+        )
+        
+        await ctx.send(embed=health_embed)
+        logger.info(f"Health check executed by {ctx.author}")
+        
+    except Exception as e:
+        logger.error(f"Error in health check: {e}", exc_info=True)
+        await ctx.send(f"🚨 **Error during health check:** {str(e)}")
+
+
+@bot.command(name="restart")
+async def restart_scheduler(ctx):
+    """Manually restart the scheduler if it's not working properly."""
+    try:
+        # Check if user has admin permissions
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission denied:** You need administrator permissions to restart the scheduler.")
+            return
+        
+        await ctx.send("🔄 **Restarting scheduler...** Please wait.")
+        
+        # Restart the scheduler
+        await market_monitor.restart_scheduler_if_needed()
+        
+        # Check if it's now running
+        if scheduler.running:
+            jobs = scheduler.get_jobs()
+            await ctx.send(f"✅ **Scheduler restarted successfully!** Running with {len(jobs)} jobs.")
+            logger.info(f"Scheduler manually restarted by {ctx.author}")
+        else:
+            await ctx.send("❌ **Scheduler restart failed.** Check the logs for more details.")
+            logger.error(f"Manual scheduler restart failed for {ctx.author}")
+            
+    except Exception as e:
+        logger.error(f"Error in manual scheduler restart: {e}", exc_info=True)
+        await ctx.send(f"🚨 **Error during scheduler restart:** {str(e)}")
 
 
 # Load all command modules
