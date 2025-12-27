@@ -1,6 +1,6 @@
 """
 Price commands for fetching stock prices.
-Refactored to use centralized utilities and consistent error handling.
+Uses async API calls for non-blocking operation.
 """
 
 from discord.ext import commands
@@ -19,12 +19,12 @@ logger = get_logger(__name__)
 async def get_price(ctx, symbol: str):
     """Returns the latest closing price for the given stock symbol."""
     log_command("price", ctx.author.name, ctx.guild.name if ctx.guild else "DM", symbol)
-    
+
     symbol = format_ticker(symbol)
-    
+
     try:
-        price, date = fetch_closing_price(symbol)
-        
+        price, date = await fetch_closing_price(symbol)
+
         # Create embed with price information
         embed = create_price_embed(
             ticker=symbol,
@@ -32,13 +32,14 @@ async def get_price(ctx, symbol: str):
             is_live=False
         )
         embed.set_footer(text=f"Closing price as of {date}")
-        
+
         await ctx.send(embed=embed)
         logger.info(f"Price fetched successfully for {symbol}: ${price}")
-        
-    except ValueError as e:
-        # Invalid ticker symbol
+
+    except ValueError:
         raise InvalidTickerException(symbol)
+    except MarketDataException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching price for {symbol}: {e}")
         raise MarketDataException(symbol, str(e))
@@ -51,12 +52,12 @@ async def get_price(ctx, symbol: str):
 async def get_current_price(ctx, symbol: str):
     """Returns the current live price for the given stock symbol."""
     log_command("current", ctx.author.name, ctx.guild.name if ctx.guild else "DM", symbol)
-    
+
     symbol = format_ticker(symbol)
-    
+
     try:
-        price, timestamp = fetch_current_price(symbol)
-        
+        price, timestamp = await fetch_current_price(symbol)
+
         # Create embed with live price information
         embed = create_price_embed(
             ticker=symbol,
@@ -64,13 +65,14 @@ async def get_current_price(ctx, symbol: str):
             is_live=True
         )
         embed.set_footer(text=f"Live price as of {timestamp}")
-        
+
         await ctx.send(embed=embed)
         logger.info(f"Current price fetched successfully for {symbol}: ${price}")
-        
-    except ValueError as e:
-        # Invalid ticker symbol
+
+    except ValueError:
         raise InvalidTickerException(symbol)
+    except MarketDataException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching current price for {symbol}: {e}")
         raise MarketDataException(symbol, str(e))

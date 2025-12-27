@@ -7,6 +7,8 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 import pytz
 
+from config.constants import MARKET_TIMEZONE
+
 try:
     import discord
     DISCORD_AVAILABLE = True
@@ -20,21 +22,21 @@ except ImportError:
             self.color = kwargs.get('color')
             self.timestamp = kwargs.get('timestamp')
             self.fields = []
-        
+
         def add_field(self, **kwargs):
             self.fields.append(kwargs)
             return self
-        
+
         def set_footer(self, **kwargs):
             self.footer = kwargs
             return self
-    
+
     class MockDiscord:
         Embed = MockEmbed
-    
+
     discord = MockDiscord()
 
-# Embed colors and timezone constants
+
 class EmbedColors:
     """Default embed colors for Discord messages."""
     SUCCESS = 0x00FF00  # Green
@@ -44,8 +46,6 @@ class EmbedColors:
     PRICE_UP = 0x00FF00 # Green for price increase
     PRICE_DOWN = 0xFF0000 # Red for price decrease
     PRICE_NEUTRAL = 0x808080 # Gray for no change
-
-MARKET_TIMEZONE = "US/Eastern"
 
 
 def format_price(price: float, currency: str = "$") -> str:

@@ -1,6 +1,6 @@
 """
 News commands for fetching financial news.
-Refactored to use centralized utilities and consistent error handling.
+Uses async API calls for non-blocking operation.
 """
 
 from discord.ext import commands
@@ -23,7 +23,7 @@ async def get_news(ctx, symbol: str):
     symbol = format_ticker(symbol)
 
     try:
-        articles = fetch_news(symbol)
+        articles = await fetch_news(symbol)
 
         # Create embed with news articles
         embed = create_news_embed(symbol, articles)
@@ -32,7 +32,6 @@ async def get_news(ctx, symbol: str):
         logger.info(f"News fetched successfully for {symbol}: {len(articles)} articles")
 
     except ValueError:
-        # Invalid ticker symbol
         raise InvalidTickerException(symbol)
     except Exception as e:
         logger.error(f"Error fetching news for {symbol}: {e}")
@@ -47,11 +46,11 @@ async def get_general_news(ctx):
     log_command("news", ctx.author.name, ctx.guild.name if ctx.guild else "DM", "general")
 
     try:
-        articles = fetch_general_market_news()
+        articles = await fetch_general_market_news()
 
         # Create embed with general market news
         embed = create_news_embed("Market", articles)
-        embed.title = "📰 Latest Market News"
+        embed.title = "Latest Market News"
 
         await ctx.send(embed=embed)
         logger.info(f"General market news fetched successfully: {len(articles)} articles")

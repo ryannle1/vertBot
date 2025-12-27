@@ -1,0 +1,61 @@
+"""
+Configuration package for VertBot.
+Provides centralized constants, settings, and path management.
+"""
+
+from config.constants import (
+    MARKET_TIMEZONE,
+    MARKET_OPEN_HOUR,
+    MARKET_OPEN_MINUTE,
+    MARKET_CLOSE_HOUR,
+    MARKET_CLOSE_MINUTE,
+    DAILY_REPORT_HOUR,
+    DAILY_REPORT_MINUTE,
+    BIG_CHANGE_THRESHOLD,
+    PRICE_CHECK_INTERVAL,
+    CACHE_TTL_SECONDS,
+    MAX_CHAT_CHANNELS,
+    BOT_PREFIX,
+)
+
+from config.settings import (
+    PROJECT_ROOT,
+    CONFIG_DIR,
+    DATA_DIR,
+    LOGS_DIR,
+    CHANNELS_FILE,
+    TICKERS_FILE,
+    DISCORD_TOKEN,
+    FINNHUB_API_KEY,
+    OLLAMA_HOST,
+    OLLAMA_MODEL,
+    ALPHA_VANTAGE_API_KEY,
+)
+
+__all__ = [
+    # Constants
+    'MARKET_TIMEZONE',
+    'MARKET_OPEN_HOUR',
+    'MARKET_OPEN_MINUTE',
+    'MARKET_CLOSE_HOUR',
+    'MARKET_CLOSE_MINUTE',
+    'DAILY_REPORT_HOUR',
+    'DAILY_REPORT_MINUTE',
+    'BIG_CHANGE_THRESHOLD',
+    'PRICE_CHECK_INTERVAL',
+    'CACHE_TTL_SECONDS',
+    'MAX_CHAT_CHANNELS',
+    'BOT_PREFIX',
+    # Settings
+    'PROJECT_ROOT',
+    'CONFIG_DIR',
+    'DATA_DIR',
+    'LOGS_DIR',
+    'CHANNELS_FILE',
+    'TICKERS_FILE',
+    'DISCORD_TOKEN',
+    'FINNHUB_API_KEY',
+    'OLLAMA_HOST',
+    'OLLAMA_MODEL',
+    'ALPHA_VANTAGE_API_KEY',
+]
